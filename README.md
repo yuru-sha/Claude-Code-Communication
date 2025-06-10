@@ -23,6 +23,8 @@ PRESIDENT → BOSS → Workers の階層型指示システムを体感できま�
 
 ### 1. tmux環境構築
 
+⚠️ **注意**: 既存の `multiagent` と `president` セッションがある場合は自動的に削除されます。
+
 ```bash
 ./setup.sh
 ```
