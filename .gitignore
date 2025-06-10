@@ -1,0 +1,23 @@
+# ログファイル
+logs/
+*.log
+*.txt
+
+# 一時ファイル
+tmp/
+*.tmp
+*_done.txt
+
+# Claude設定（ローカル環境用）
+.claude/settings.local.json
+
+# OS固有
+.DS_Store
+Thumbs.db
+
+# エディタ
+*.swp
+*.swo
+*~
+.vscode/
+.idea/ 
