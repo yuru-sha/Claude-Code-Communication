@@ -21,6 +21,13 @@ PRESIDENT → BOSS → Workers の階層型指示システムを体感できま�
 
 ## 🚀 クイックスタート
 
+### 0. リポジトリのクローン
+
+```bash
+git clone https://github.com/nishimoto265/Claude-Code-Communication.git
+cd Claude-Code-Communication
+```
+
 ### 1. tmux環境構築
 
 ⚠️ **注意**: 既存の `multiagent` と `president` セッションがある場合は自動的に削除されます。
