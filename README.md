@@ -56,7 +56,7 @@ for i in {0..3}; do tmux send-keys -t multiagent:0.$i 'claude' C-m; done
 
 PRESIDENTセッションで直接入力：
 ```
-指示書に従って
+あなたはpresidentです。指示書に従って
 ```
 
 ## 📜 指示書について
@@ -69,7 +69,7 @@ PRESIDENTセッションで直接入力：
 **Claude Code参照**: `CLAUDE.md` でシステム構造を確認
 
 **要点:**
-- **PRESIDENT**: 「指示書に従って」→ boss1に指示送信
+- **PRESIDENT**: 「あなたはpresidentです。指示書に従って」→ boss1に指示送信
 - **boss1**: PRESIDENT指示受信 → workers全員に指示 → 完了報告
 - **workers**: Hello World実行 → 完了ファイル作成 → 最後の人が報告
 
