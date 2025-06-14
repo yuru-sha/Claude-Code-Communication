@@ -33,32 +33,50 @@ cd Claude-Code-Communication
 ```bash
 ./setup.sh
 ```
-これで4つのターミナル画面が自動で作られます！
+これでバックグラウンドに5つのターミナル画面が準備されます！
 
-#### 3️⃣ AIを起動（2分）
+#### 3️⃣ 社長画面を開いてAI起動（2分）
 
-**まず社長（PRESIDENT）を起動：**
+**社長画面を開く：**
 ```bash
-# 新しいターミナルを開いて
-tmux attach -t president
-
-# Claudeを起動（ブラウザで認証が必要）
-claude
+tmux attach-session -t president
 ```
 
-**次に部下たちを一括起動：**
+**社長画面でClaudeを起動：**
 ```bash
-# 別のターミナルで
+# ブラウザで認証が必要
+claude --dangerously-skip-permissions
+```
+
+#### 4️⃣ 部下たちを一括起動（1分）
+
+**新しいターミナルを開いて：**
+```bash
+# 4人の部下を一括起動
 for i in {0..3}; do 
-  tmux send-keys -t multiagent:0.$i 'claude --dangerously-skip-permissions' C-m
+  tmux send-keys -t multiagent.$i 'claude --dangerously-skip-permissions' C-m
 done
 ```
 
-#### 4️⃣ 魔法の言葉を入力（30秒）
-
-社長（PRESIDENT）の画面で：
+#### 5️⃣ 部下たちの画面を確認
+・各画面でブラウザでのClaude認証が必要な場合あり
+```bash
+tmux attach-session -t multiagent
 ```
-あなたはpresidentです。指示書に従って
+これで4分割された画面が表示されます：
+```
+┌────────┬────────┐
+│ boss1  │worker1 │
+├────────┼────────┤
+│worker2 │worker3 │
+└────────┴────────┘
+```
+
+#### 6️⃣ 魔法の言葉を入力（30秒）
+
+そして入力：
+```
+あなたはpresidentです。おしゃれな充実したIT企業のホームページを作成して。
 ```
 
 **すると自動的に：**
