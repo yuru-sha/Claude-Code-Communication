@@ -373,3 +373,44 @@ sleep 300
 **作者**: [GitHub](https://github.com/nishimoto265/Claude-Code-Communication)
 **ライセンス**: MIT
 **質問**: [Issues](https://github.com/nishimoto265/Claude-Code-Communication/issues)へどうぞ！
+
+
+## 参考リンク
+ 
+・Claude Code公式
+　　URL: https://docs.anthropic.com/ja/docs/claude-code/overview
+ 
+・Tmux Cheat Sheet & Quick Reference | Session, window, pane and more
+　　URL: https://tmuxcheatsheet.com/
+ 
+・Akira-Papa/Claude-Code-Communication
+　　URL: https://github.com/Akira-Papa/Claude-Code-Communication
+ 
+・【tmuxでClaude CodeのMaxプランでAI組織を動かし放題のローカル環境ができた〜〜〜！ので、やり方をシェア！！🔥🔥🔥🙌☺️】 #AIエージェント - Qiita
+　　URL: https://qiita.com/akira_papa_AI/items/9f6c6605e925a88b9ac5
+ 
+・Claude Code コマンドチートシート完全ガイド #ClaudeCode - Qiita
+　　URL: https://qiita.com/akira_papa_AI/items/d68782fbf03ffd9b2f43
+ 
+ 
+※以下の情報を参考に、今回のtmuxのClaude Code組織環境を構築することができました。本当にありがとうございました！☺️🙌
+ 
+◇Claude Code双方向通信をシェルで一撃構築できるようにした発案者の元木さん
+参考GitHub ：
+haconiwa/README_JA.md at main · dai-motoki/haconiwa
+　　URL: https://github.com/dai-motoki/haconiwa/blob/main/README_JA.md
+ 
+・神威/KAMUI（@kamui_qai）さん / X
+　　URL: https://x.com/kamui_qai
+ 
+◇簡単にClaude Code双方向通信環境を構築できるようシェアして頂いたダイコンさん
+参考GitHub：
+nishimoto265/Claude-Code-Communication
+　　URL: https://github.com/nishimoto265/Claude-Code-Communication
+ 
+・ ダイコン（@daikon265）さん / X
+　　URL: https://x.com/daikon265
+ 
+◇Claude Code公式解説動画：
+Mastering Claude Code in 30 minutes - YouTube
+　　URL: https://www.youtube.com/live/6eBSHbLKuN0?t=1356s
