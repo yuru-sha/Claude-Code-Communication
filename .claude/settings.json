@@ -1,0 +1,82 @@
+{
+  "env": {
+    "CLAUDE_CACHE": "./.ccache"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(git status)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git diff *)",
+      "Bash(npm install)",
+      "Bash(npm run *)",
+      "Bash(npm test)",
+      "Bash(python *)",
+      "Bash(pip install *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(chmod [0-7][0-7][0-7] *)",
+      "Bash(eza *)",
+      "Bash(batcat *)",
+      "Bash(rg *)",
+      "Bash(fd *)",
+      "Bash(dust *)",
+      "Bash(z *)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(chmod 777 *)",
+      "Bash(chmod -R 777 *)",
+      "Bash(curl * | sh)",
+      "Bash(wget * | sh)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | bash)",
+      "Bash(git config --global *)",
+      "Bash(npm config set *)",
+      "Bash(sudo *)",
+      "Bash(su *)",
+      "Bash(killall -9 *)",
+      "Bash(iptables -F)",
+      "Bash(ufw disable)",
+      "Bash(systemctl *)",
+      "Bash(service *)",
+      "Bash(dd if=/dev/zero *)",
+      "Bash(dd if=/dev/urandom *)",
+      "Bash(shred *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/scripts/deny-check.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/scripts/activity-logger.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/scripts/ai-logger.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
