@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Code Communication - Debug</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .status {
+            background-color: #333;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>Claude Code Communication - Debug Page</h1>
+    
+    <div class="status">
+        <h2>静的 HTML テスト</h2>
+        <p class="success">✓ この画面が表示されていれば、Vite サーバーは正常に動作しています</p>
+    </div>
+    
+    <div class="status">
+        <h2>JavaScript テスト</h2>
+        <p id="js-test">JavaScript をテスト中...</p>
+    </div>
+    
+    <div class="status">
+        <h2>React アプリへのリンク</h2>
+        <p><a href="/" style="color: #4CAF50;">メインアプリに戻る</a></p>
+    </div>
+    
+    <script>
+        // JavaScript が動作しているかテスト
+        document.getElementById('js-test').innerHTML = '<span class="success">✓ JavaScript は正常に動作しています</span>';
+        
+        // コンソールにデバッグ情報を出力
+        console.log('Debug page loaded successfully');
+        console.log('Current URL:', window.location.href);
+        console.log('User Agent:', navigator.userAgent);
+    </script>
+</body>
+</html>
