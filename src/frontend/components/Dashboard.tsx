@@ -106,6 +106,16 @@ export const Dashboard = ({ terminalsOnly = false }: DashboardProps) => {
       console.log('Task cancelled:', data.message);
     });
 
+    // タスク削除通知
+    socket.on('task-deleted', (data: { taskId: string; projectName?: string }) => {
+      setTasks(prev => prev.filter(t => t.id !== data.taskId));
+      setQueueStats(prev => ({ 
+        ...prev, 
+        pending: Math.max(0, prev.pending - 1) 
+      }));
+      console.log('Task deleted:', data.taskId);
+    });
+
     return () => {
       socket.off('task-queue-updated');
       socket.off('task-queued');
@@ -115,6 +125,7 @@ export const Dashboard = ({ terminalsOnly = false }: DashboardProps) => {
       socket.off('system-error');
       socket.off('emergency-stop-completed');
       socket.off('task-cancelled');
+      socket.off('task-deleted');
     };
   }, [socket]);
 
@@ -138,7 +149,8 @@ export const Dashboard = ({ terminalsOnly = false }: DashboardProps) => {
   const handleCancelTask = (taskId: string) => {
     if (socket) {
       socket.emit('cancel-task', taskId);
-      setTasks(prev => prev.filter(t => t.id !== taskId));
+      // サーバーからの削除確認を待つため、ここでの UI 更新は削除
+      // 削除は 'task-deleted' イベントで処理される
     }
   };
 

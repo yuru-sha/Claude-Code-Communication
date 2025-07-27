@@ -116,6 +116,7 @@ let taskCompletionPatterns = [
   // President の正式完了宣言（最優先）
   /プロジェクト正式完了を宣言します[。！]/,
   /プロジェクト完全成功を正式に宣言[。！]/,
+  /プロジェクトが正常に完了しました[。！]/,
   
   // フォールバック用の一般的なパターン
   /(?:タスク|プロジェクト|作業|開発)(?:が|を)?(?:完全に|すべて)?(?:完了|終了|完成)(?:いたし|し) ました[。！]/i,
@@ -481,7 +482,8 @@ const checkAgentCompletion = async (agent: { name: string; target: string }, inP
         if (agent.name === 'president') {
           const presidentCompletionPatterns = [
             /プロジェクト正式完了を宣言します[。！]/,
-            /プロジェクト完全成功を正式に宣言[。！]/
+            /プロジェクト完全成功を正式に宣言[。！]/,
+            /プロジェクトが正常に完了しました[。！]/
           ];
           completionMatch = presidentCompletionPatterns.some(pattern => pattern.test(newContent));
         } else {
@@ -537,7 +539,8 @@ const checkAgentCompletion = async (agent: { name: string; target: string }, inP
                 // President の正式完了宣言の場合は専用クリーンアップを実行
                 if (agent.name === 'president' && (
                   /プロジェクト正式完了を宣言します[。！]/.test(newContent) ||
-                  /プロジェクト完全成功を正式に宣言[。！]/.test(newContent)
+                  /プロジェクト完全成功を正式に宣言[。！]/.test(newContent) ||
+                  /プロジェクトが正常に完了しました[。！]/.test(newContent)
                 )) {
                   console.log('🎉 Project officially completed by President - performing project completion cleanup');
                   setTimeout(() => performProjectCompletionCleanup(), 2000);
@@ -937,7 +940,7 @@ const performProjectStartCleanup = async (): Promise<void> => {
   try {
     console.log('🚀 Performing project start cleanup...');
 
-    // 各エージェントの Claude Code に /clear を送信
+    // 各エージェントの Claude Code に /clear を送信（tmux 作法に従って）
     const agents = [
       { name: 'president', target: 'president' },
       { name: 'boss1', target: 'multiagent:0.0' },
@@ -948,9 +951,20 @@ const performProjectStartCleanup = async (): Promise<void> => {
 
     for (const agent of agents) {
       try {
-        // /clear を送信してセッションをクリア
-        await execAsync(`tmux send-keys -t "${agent.target}" '/clear' C-m`);
-        await new Promise(resolve => setTimeout(resolve, 500)); // 少し待機
+        // tmux ペインが存在するかチェック
+        await execAsync(`tmux has-session -t "${agent.target.split(':')[0]}" 2>/dev/null`);
+        
+        // 特定のペインを選択してからコマンドを送信
+        await execAsync(`tmux select-pane -t "${agent.target}"`);
+        
+        // 入力を安全にクリアしてから /clear を実行
+        await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // /clear コマンドを送信（コマンドと Enter を分けて送信）
+        await execAsync(`tmux send-keys -t "${agent.target}" '/clear'`);
+        await execAsync(`tmux send-keys -t "${agent.target}" C-m`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // /clear 実行完了を待機
 
         console.log(`✅ Claude Code session cleared in ${agent.name} for new project`);
       } catch (error) {
@@ -1058,7 +1072,7 @@ const performProjectCompletionCleanup = async (): Promise<void> => {
   try {
     console.log('🎉 Performing project completion cleanup...');
 
-    // Claude Code に /clear を送信してセッションをクリア
+    // Claude Code に /clear を送信してセッションをクリア（tmux 作法に従って）
     console.log('🧹 Clearing Claude Code sessions...');
     const agents = [
       { name: 'president', target: 'president' },
@@ -1070,9 +1084,20 @@ const performProjectCompletionCleanup = async (): Promise<void> => {
 
     for (const agent of agents) {
       try {
-        // /clear を送信してセッションをクリア
-        await execAsync(`tmux send-keys -t "${agent.target}" '/clear' C-m`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // クリア処理を待機
+        // tmux ペインが存在するかチェック
+        await execAsync(`tmux has-session -t "${agent.target.split(':')[0]}" 2>/dev/null`);
+        
+        // 特定のペインを選択してからコマンドを送信
+        await execAsync(`tmux select-pane -t "${agent.target}"`);
+        
+        // 入力を安全にクリアしてから /clear を実行
+        await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // /clear コマンドを送信（コマンドと Enter を分けて送信）
+        await execAsync(`tmux send-keys -t "${agent.target}" '/clear'`);
+        await execAsync(`tmux send-keys -t "${agent.target}" C-m`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // クリア処理を待機
 
         console.log(`✅ Claude Code session cleared in ${agent.name} (${agent.target})`);
       } catch (error) {
@@ -1123,9 +1148,20 @@ const performTaskCompletionCleanup = async (): Promise<void> => {
 
     for (const agent of agents) {
       try {
-        // まず /clear を送信してセッションをクリア
-        await execAsync(`tmux send-keys -t "${agent.target}" '/clear' C-m`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // クリア処理を待機
+        // tmux ペインが存在するかチェック
+        await execAsync(`tmux has-session -t "${agent.target.split(':')[0]}" 2>/dev/null`);
+        
+        // 特定のペインを選択してからコマンドを送信
+        await execAsync(`tmux select-pane -t "${agent.target}"`);
+        
+        // 入力を安全にクリアしてから /clear を実行
+        await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // /clear を送信してセッションをクリア（コマンドと Enter を分けて送信）
+        await execAsync(`tmux send-keys -t "${agent.target}" '/clear'`);
+        await execAsync(`tmux send-keys -t "${agent.target}" C-m`);
+        await new Promise(resolve => setTimeout(resolve, 2000)); // クリア処理を待機
         
         // その後 Ctrl+C を送信して Claude Code プロセスを終了
         await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
