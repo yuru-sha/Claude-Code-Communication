@@ -1036,8 +1036,16 @@ body {
 
 /* Task Pipeline */
 .task-stats {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, auto);
   gap: var(--space-sm);
+  max-width: 400px;
+  min-width: 300px;
+}
+
+.task-stats .stat-chip.total {
+  grid-column: 1 / -1;
 }
 
 .stat-chip {
@@ -1046,8 +1054,34 @@ body {
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-lg);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: fit-content;
   font-size: 0.75rem;
   font-weight: 500;
+  border: none;
+  background: inherit;
+  color: inherit;
+}
+
+.stat-chip.clickable {
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.stat-chip.clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  opacity: 0.9;
+}
+
+.stat-chip.clickable.active {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.stat-chip.clickable:active {
+  transform: translateY(0);
 }
 
 .stat-chip.pending {
@@ -1589,19 +1623,19 @@ body {
 }
 
 .status-dot.idle {
-  background: var(--success);
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  background: var(--warning);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
 }
 
 .status-dot.working {
-  background: var(--warning);
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  background: var(--success);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
   animation: pulse 2s infinite;
 }
 
 .status-dot.offline {
-  background: var(--text-muted);
-  box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.2);
+  background: var(--error);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
 
 /* Terminal Panel (Legacy) */
@@ -1806,3 +1840,315 @@ body {
 .kpi-card {
   animation: fadeIn 0.4s ease;
 }
+
+/* ===== Task Pipeline Filters ===== */
+.panel-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: var(--space-md);
+}
+
+.header-actions {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  padding: var(--space-sm);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  position: relative;
+}
+
+.filter-toggle:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-secondary);
+  color: var(--text-primary);
+}
+
+.filter-toggle.active {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.filter-toggle.has-filters {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--primary-light);
+}
+
+.filter-indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  background: var(--primary);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.reset-filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  padding: var(--space-sm);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.reset-filters:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
+  color: var(--text-secondary);
+}
+
+.filter-panel {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  margin: var(--space-sm) 0 var(--space-md) 0;
+  animation: slideDown 0.2s ease-out;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: var(--space-lg);
+  align-items: end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.filter-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.search-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: var(--space-sm);
+  color: var(--text-muted);
+  z-index: 1;
+}
+
+.search-input {
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-sm) var(--space-sm) 2.5rem;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition: all var(--transition-normal);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.filter-select {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.filter-select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.stat-chip.total {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.2);
+  color: #A5B4FC;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Responsive Filters */
+@media (max-width: 1024px) {
+  .task-stats {
+    max-width: 350px;
+    min-width: 280px;
+    gap: var(--space-xs);
+  }
+  
+  .stat-chip {
+    font-size: 0.8rem;
+    padding: var(--space-xs);
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+  
+  .panel-header-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-md);
+  }
+  
+  .header-actions {
+    align-self: flex-end;
+  }
+  
+  .task-stats {
+    width: 100%;
+    max-width: none;
+    min-width: auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    gap: var(--space-xs);
+  }
+  
+  .task-stats .stat-chip.total {
+    grid-column: 1;
+  }
+  
+  .stat-chip {
+    font-size: 0.75rem;
+    padding: var(--space-xs);
+  }
+}
+
+/* ===== Project Download Button ===== */
+.download-project-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: var(--radius-sm);
+  color: #10B981;
+  padding: var(--space-xs);
+  margin-left: var(--space-sm);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  vertical-align: middle;
+}
+
+.download-project-btn:hover {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #059669;
+  transform: translateY(-1px);
+}
+
+.download-project-btn:active {
+  transform: translateY(0);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* ===== Task Header Actions ===== */
+.task-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.task-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-sm);
+  color: rgba(239, 68, 68, 0.7);
+  padding: var(--space-xs);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  opacity: 0.6;
+}
+
+.task-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #EF4444;
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.task-delete-btn:active {
+  transform: translateY(0);
+}
+
+.task-card:hover .task-delete-btn {
+  opacity: 1;
+}
+
+/* ===== END: Task Pipeline Filters =====*/

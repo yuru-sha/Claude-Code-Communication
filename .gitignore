@@ -102,6 +102,9 @@ temp/
 *-report.html
 *-report.md
 lighthouse-reports/
+lighthouse-*.html
+lighthouse-*.json
+lighthouse-baseline.html
 final-quality-report.md
 quality-report-template.md
 

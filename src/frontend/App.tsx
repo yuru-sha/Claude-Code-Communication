@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSocket } from './hooks/useSocket';
 import { Activity, Users, CheckCircle, Clock, AlertCircle, Terminal, Send, BarChart3, TrendingUp, X, RefreshCw, AlertTriangle, History, ChevronDown, ChevronUp, Heart, Shield, ShieldAlert, ShieldOff } from 'lucide-react';
+import { TaskPipeline } from './components/TaskPipeline';
 import './styles/dashboard.css';
 
 interface Task {
@@ -123,6 +124,13 @@ function App() {
 
     socket.on('task-retried', (task: Task) => {
       setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+    });
+
+    socket.on('task-deleted', (taskId: string) => {
+      console.log('🗑️ Task deleted:', taskId);
+      setTasks(prevTasks => 
+        prevTasks.filter(t => t.id !== taskId)
+      );
     });
 
     socket.on('task-queue-updated', (update: any) => {
@@ -287,7 +295,7 @@ function App() {
     // 初回実行
     fetchAllTerminalOutputs();
     
-    // 間隔を8秒に延長（負荷軽減）
+    // 間隔を 8 秒に延長（負荷軽減）
     const interval = setInterval(fetchAllTerminalOutputs, 8000);
 
     return () => {
@@ -322,6 +330,12 @@ function App() {
   const handleMarkTaskFailed = useCallback((taskId: string, reason: string) => {
     if (socket) {
       socket.emit('mark-task-failed', { taskId, reason });
+    }
+  }, [socket]);
+
+  const handleDeleteTask = useCallback((taskId: string) => {
+    if (socket) {
+      socket.emit('delete-task', taskId);
     }
   }, [socket]);
 
@@ -629,168 +643,12 @@ function App() {
 
           {/* Center - Task Management */}
           <div className="dashboard-center">
-            <div className="panel large">
-              <div className="panel-header">
-                <h2 className="panel-title">Task Pipeline</h2>
-                <div className="task-stats">
-                  <div className="stat-chip pending">
-                    <AlertCircle size={14} />
-                    <span>{taskStats.pending} Pending</span>
-                  </div>
-                  <div className="stat-chip progress">
-                    <Clock size={14} />
-                    <span>{taskStats.inProgress} Active</span>
-                  </div>
-                  <div className="stat-chip completed">
-                    <CheckCircle size={14} />
-                    <span>{taskStats.completed} Done</span>
-                  </div>
-                  {taskStats.failed > 0 && (
-                    <div className="stat-chip failed">
-                      <AlertTriangle size={14} />
-                      <span>{taskStats.failed} Failed</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="panel-content">
-                <div className="task-pipeline">
-                  {tasks.length === 0 ? (
-                    <div className="empty-state">
-                      <div className="empty-icon">
-                        <Activity size={48} strokeWidth={1} />
-                      </div>
-                      <h3>No tasks in pipeline</h3>
-                      <p>Submit a task to get your AI agents working</p>
-                    </div>
-                  ) : (
-                    <div className="task-list">
-                      {tasks.map((task, index) => (
-                        <div key={task.id} className={`task-card ${task.status}`}>
-                          <div className="task-header">
-                            <div className="task-number">#{index + 1}</div>
-                            <h3 className="task-title">{task.title}</h3>
-                            <div className={`task-status ${task.status}`}>
-                              {task.status === 'pending' && <AlertCircle size={14} />}
-                              {task.status === 'in_progress' && <Clock size={14} />}
-                              {task.status === 'completed' && <CheckCircle size={14} />}
-                              {task.status === 'paused' && <AlertCircle size={14} />}
-                              {task.status === 'failed' && <X size={14} />}
-                              <span>{task.status.replace('_', ' ')}</span>
-                            </div>
-                          </div>
-                          {task.description && task.description !== task.title && (
-                            <p className="task-description">{task.description}</p>
-                          )}
-                          <div className="task-meta">
-                            <div className="meta-item">
-                              <span className="meta-label">ID:</span>
-                              <span className="meta-value">{task.id.slice(0, 8)}</span>
-                            </div>
-                            {task.assignedTo && (
-                              <div className="meta-item">
-                                <span className="meta-label">Agent:</span>
-                                <span className="meta-value">{task.assignedTo}</span>
-                              </div>
-                            )}
-                            {task.projectName && (
-                              <div className="meta-item">
-                                <span className="meta-label">Project:</span>
-                                <span className="meta-value">workspace/{task.projectName}</span>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* プログレスバーを失敗情報の前に統一配置 */}
-                          <div className="task-progress">
-                            <div className="progress-bar">
-                              <div 
-                                className="progress-fill"
-                                style={{ 
-                                  width: task.status === 'completed' ? '100%' : 
-                                         task.status === 'in_progress' ? '60%' : 
-                                         task.status === 'failed' ? '100%' :
-                                         task.status === 'pending' ? '0%' : '30%'
-                                }}
-                              ></div>
-                            </div>
-                          </div>
-
-                          {task.status === 'failed' && (
-                            <div className="task-failure-info">
-                              <div className="failure-header">
-                                <div className="failure-icon">
-                                  <AlertTriangle size={16} />
-                                </div>
-                                <div className="failure-summary">
-                                  <h4 className="failure-title">失敗</h4>
-                                  {task.failureReason && (
-                                    <p className="failure-reason">{task.failureReason}</p>
-                                  )}
-                                </div>
-                                <div className="failure-actions-inline">
-                                  <button
-                                    className="retry-button-small"
-                                    onClick={() => handleRetryTask(task.id)}
-                                    title="再実行"
-                                  >
-                                    <RefreshCw size={14} />
-                                  </button>
-                                </div>
-                              </div>
-                              
-                              {(task.retryCount > 0 || (task.errorHistory && task.errorHistory.length > 0)) && (
-                                <div className="failure-details-compact">
-                                  <div className="failure-stats-compact">
-                                    {task.retryCount > 0 && (
-                                      <span className="stat-compact">再試行: {task.retryCount}</span>
-                                    )}
-                                    {task.errorHistory && task.errorHistory.length > 0 && (
-                                      <button 
-                                        className="error-history-toggle-compact"
-                                        onClick={() => toggleErrorHistory(task.id)}
-                                      >
-                                        <History size={12} />
-                                        履歴 ({task.errorHistory.length})
-                                        {expandedErrorHistory.has(task.id) ? 
-                                          <ChevronUp size={12} /> : 
-                                          <ChevronDown size={12} />
-                                        }
-                                      </button>
-                                    )}
-                                  </div>
-                                  
-                                  {expandedErrorHistory.has(task.id) && task.errorHistory && task.errorHistory.length > 0 && (
-                                    <div className="error-history-list-compact">
-                                      {task.errorHistory.slice(-3).map((error: any, index: number) => (
-                                        <div key={index} className="error-entry-compact">
-                                          <div className="error-entry-header-compact">
-                                            <span className="error-entry-time-compact">
-                                              {new Date(error.timestamp).toLocaleDateString('ja-JP')} {new Date(error.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-                                            </span>
-                                            <span className="error-entry-attempt-compact">
-                                              試行 #{error.retryCount + 1}
-                                            </span>
-                                          </div>
-                                          <div className="error-entry-reason-compact">
-                                            {error.reason}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            <TaskPipeline 
+              tasks={tasks}
+              onRetryTask={handleRetryTask}
+              onMarkTaskFailed={handleMarkTaskFailed}
+              onDeleteTask={handleDeleteTask}
+            />
           </div>
 
           {/* Right Panel - Terminal */}

@@ -1,20 +1,21 @@
 # 🤖 Claude Code エージェント通信システム
 
-複数のAIが協力して働く、まるで会社のような開発システムです
+複数の AI が協力して働く、まるで会社のような開発システム + リアルタイム監視ダッシュボード
 
 ## 📌 これは何？
 
-**3行で説明すると：**
-1. 複数のAIエージェント（社長・マネージャー・作業者）が協力して開発
-2. それぞれ異なるターミナル画面で動作し、メッセージを送り合う
+**3 行で説明すると：**
+1. 複数の AI エージェント（社長・マネージャー・作業者）が協力して開発
+2. WebUI ダッシュボードでリアルタイム監視・管理
 3. 人間の組織のように役割分担して、効率的に開発を進める
 
 **実際の成果：**
-- 3時間で完成したアンケートシステム（EmotiFlow）
-- 12個の革新的アイデアを生成
-- 100%のテストカバレッジ
+- 3 時間で完成したアンケートシステム（EmotiFlow）
+- 12 個の革新的アイデアを生成
+- 100% のテストカバレッジ
+- WebUI ダッシュボードで完全監視
 
-## 🎬 5分で動かしてみよう！
+## 🎬 5 分で動かしてみよう！
 
 ### 必要なもの
 - Mac または Linux
@@ -23,47 +24,47 @@
 
 ### 手順
 
-#### 1️⃣ ダウンロード（30秒）
+#### 1️⃣ ダウンロード（30 秒）
 ```bash
 git clone https://github.com/nishimoto265/Claude-Code-Communication.git
 cd Claude-Code-Communication
 ```
 
-#### 2️⃣ 環境構築（1分）
+#### 2️⃣ 環境構築（1 分）
 ```bash
 ./setup.sh
 ```
-これでバックグラウンドに5つのターミナル画面が準備されます！
+これでバックグラウンドに 5 つのターミナル画面が準備されます！
 
-#### 3️⃣ 社長画面を開いてAI起動（2分）
+#### 3️⃣ 社長画面を開いて AI 起動（2 分）
 
 **社長画面を開く：**
 ```bash
 tmux attach-session -t president
 ```
 
-**社長画面でClaudeを起動：**
+**社長画面で Claude を起動：**
 ```bash
 # ブラウザで認証が必要
 claude --dangerously-skip-permissions
 ```
 
-#### 4️⃣ 部下たちを一括起動（1分）
+#### 4️⃣ 部下たちを一括起動（1 分）
 
 **新しいターミナルを開いて：**
 ```bash
-# 4人の部下を一括起動
+# 4 人の部下を一括起動
 for i in {0..3}; do 
   tmux send-keys -t multiagent.$i 'claude --dangerously-skip-permissions' C-m
 done
 ```
 
 #### 5️⃣ 部下たちの画面を確認
-・各画面でブラウザでのClaude認証が必要な場合あり
+・各画面でブラウザでの Claude 認証が必要な場合あり
 ```bash
 tmux attach-session -t multiagent
 ```
-これで4分割された画面が表示されます：
+これで 4 分割された画面が表示されます：
 ```
 ┌────────┬────────┐
 │ boss1  │worker1 │
@@ -72,18 +73,44 @@ tmux attach-session -t multiagent
 └────────┴────────┘
 ```
 
-#### 6️⃣ 魔法の言葉を入力（30秒）
+#### 6️⃣ 魔法の言葉を入力（30 秒）
 
 そして入力：
 ```
-あなたはpresidentです。おしゃれな充実したIT企業のホームページを作成して。
+あなたは president です。おしゃれな充実した IT 企業のホームページを作成して。
 ```
 
 **すると自動的に：**
 1. 社長がマネージャーに指示
-2. マネージャーが3人の作業者に仕事を割り振り
+2. マネージャーが 3 人の作業者に仕事を割り振り
 3. みんなで協力して開発
 4. 完成したら社長に報告
+
+## 🖥️ WebUI ダッシュボード（新機能！）
+
+### 🚀 簡単起動
+```bash
+# WebUI を起動（ポート 3000 でアクセス）
+npm run dev
+```
+
+### 📊 主要機能
+- **📋 Task Pipeline**: フィルター機能付きタスク管理（検索・ステータス・プロジェクト別）
+- **📈 KPI Metrics**: リアルタイム統計とパフォーマンス指標
+- **👥 Agent Status**: 5 つのエージェントの稼働状況をリアルタイム監視
+- **💻 Tabbed Terminals**: 各エージェントのターミナル出力を統合表示
+- **🔄 System Health**: システム障害の自動検出と復旧機能
+
+### 🎯 ステータス色の意味
+- **🟢 緑**: 作業中（積極的に動作）
+- **🟡 オレンジ**: 待機中（起動済みだが作業なし）
+- **🔴 赤**: オフライン（未起動または障害）
+
+### ✨ 新機能
+- **タスク削除**: workspace/ディレクトリも含む完全削除
+- **プロジェクトダウンロード**: 完了タスクを ZIP 形式でダウンロード
+- **統計チップ**: クリックでステータス別フィルタリング（2 列 2 行レイアウト）
+- **自動復旧**: システム障害時の自動復旧とマニュアル復旧オプション
 
 ## 🏢 登場人物（エージェント）
 
@@ -95,7 +122,7 @@ tmux attach-session -t multiagent
 ### 🎯 マネージャー（boss1）
 - **役割**: チームをまとめる中間管理職
 - **特徴**: メンバーの創造性を引き出す達人
-- **口癖**: 「革新的なアイデアを3つ以上お願いします」
+- **口癖**: 「革新的なアイデアを 3 つ以上お願いします」
 
 ### 👷 作業者たち（worker1, 2, 3）
 - **worker1**: デザイン担当（UI/UX）
@@ -111,15 +138,15 @@ tmux attach-session -t multiagent
 # 例：マネージャーに送る
 ./agent-send.sh boss1 "新しいプロジェクトです"
 
-# 例：作業者1に送る
-./agent-send.sh worker1 "UIを作ってください"
+# 例：作業者 1 に送る
+./agent-send.sh worker1 "UI を作ってください"
 ```
 
 ### 実際のやり取りの例
 
 **社長 → マネージャー：**
 ```
-あなたはboss1です。
+あなたは boss1 です。
 
 【プロジェクト名】アンケートシステム開発
 
@@ -127,7 +154,7 @@ tmux attach-session -t multiagent
 誰でも簡単に使えて、結果がすぐ見られるシステム
 
 【成功基準】
-- 3クリックで回答完了
+- 3 クリックで回答完了
 - リアルタイムで結果表示
 
 革新的なアイデアで実現してください。
@@ -135,12 +162,12 @@ tmux attach-session -t multiagent
 
 **マネージャー → 作業者：**
 ```
-あなたはworker1です。
+あなたは worker1 です。
 
 【プロジェクト】アンケートシステム
 
 【チャレンジ】
-UIデザインの革新的アイデアを3つ以上提案してください。
+UI デザインの革新的アイデアを 3 つ以上提案してください。
 
 【フォーマット】
 1. アイデア名：[キャッチーな名前]
@@ -159,7 +186,7 @@ UIデザインの革新的アイデアを3つ以上提案してください。
 最高の経営者として、ユーザーのニーズを理解し、
 ビジョンを示してください
 
-# ニーズの5層分析
+# ニーズの 5 層分析
 1. 表層：何を作るか
 2. 機能層：何ができるか  
 3. 便益層：何が改善されるか
@@ -173,8 +200,8 @@ UIデザインの革新的アイデアを3つ以上提案してください。
 天才的なファシリテーターとして、
 チームの創造性を最大限に引き出してください
 
-# 10分ルール
-10分ごとに進捗を確認し、
+# 10 分ルール
+10 分ごとに進捗を確認し、
 困っているメンバーをサポートします
 ```
 
@@ -256,20 +283,20 @@ rm -rf ./tmp/*
 
 ## 🚀 自分のプロジェクトを作る
 
-### 簡単な例：TODOアプリを作る
+### 簡単な例：TODO アプリを作る
 
 社長（PRESIDENT）で入力：
 ```
-あなたはpresidentです。
-TODOアプリを作ってください。
+あなたは president です。
+TODO アプリを作ってください。
 シンプルで使いやすく、タスクの追加・削除・完了ができるものです。
 ```
 
 すると自動的に：
 1. マネージャーがタスクを分解
-2. worker1がUI作成
-3. worker2がデータ管理
-4. worker3がテスト作成
+2. worker1 が UI 作成
+3. worker2 がデータ管理
+4. worker3 がテスト作成
 5. 完成！
 
 ## 📊 システムの仕組み（図解）
@@ -281,9 +308,9 @@ TODOアプリを作ってください。
 └─────────────────┘
 
 ┌────────┬────────┐
-│ boss1  │worker1 │ ← マネージャー（赤）と作業者1（青）
+│ boss1  │worker1 │ ← マネージャー（赤）と作業者 1（青）
 ├────────┼────────┤
-│worker2 │worker3 │ ← 作業者2と3（青）
+│worker2 │worker3 │ ← 作業者 2 と 3（青）
 └────────┴────────┘
 ```
 
@@ -303,9 +330,9 @@ TODOアプリを作ってください。
 ### 進捗管理の仕組み
 ```
 ./tmp/
-├── worker1_done.txt     # 作業者1が完了したらできるファイル
-├── worker2_done.txt     # 作業者2が完了したらできるファイル
-├── worker3_done.txt     # 作業者3が完了したらできるファイル
+├── worker1_done.txt     # 作業者 1 が完了したらできるファイル
+├── worker2_done.txt     # 作業者 2 が完了したらできるファイル
+├── worker3_done.txt     # 作業者 3 が完了したらできるファイル
 └── worker*_progress.log # 進捗の記録
 ```
 
@@ -318,11 +345,11 @@ TODOアプリを作ってください。
 
 ### このシステム
 ```
-人間 → AI社長 → AIマネージャー → AI作業者×3 → 統合 → 結果
+人間 → AI 社長 → AI マネージャー → AI 作業者×3 → 統合 → 結果
 ```
 
 **メリット：**
-- 並列処理で3倍速い
+- 並列処理で 3 倍速い
 - 専門性を活かせる
 - アイデアが豊富
 - 品質が高い
@@ -333,7 +360,7 @@ TODOアプリを作ってください。
 
 **良い例：**
 ```
-あなたはboss1です。
+あなたは boss1 です。
 
 【プロジェクト名】明確な名前
 【ビジョン】具体的な理想
@@ -355,63 +382,63 @@ TODOアプリを作ってください。
 **タイマーを変更：**
 ```bash
 # instructions/boss.md の中の
-sleep 600  # 10分を5分に変更するなら
+sleep 600  # 10 分を 5 分に変更するなら
 sleep 300
 ```
 
 ## 🌟 まとめ
 
-このシステムは、複数のAIが協力することで：
-- **3時間**で本格的なWebアプリが完成
-- **12個**の革新的アイデアを生成
+このシステムは、複数の AI が協力することで：
+- **3 時間**で本格的な Web アプリが完成
+- **12 個**の革新的アイデアを生成
 - **100%**のテストカバレッジを実現
 
-ぜひ試してみて、AIチームの力を体験してください！
+ぜひ試してみて、AI チームの力を体験してください！
 
 ---
 
 **作者**: [GitHub](https://github.com/nishimoto265/Claude-Code-Communication)
 **ライセンス**: MIT
-**質問**: [Issues](https://github.com/nishimoto265/Claude-Code-Communication/issues)へどうぞ！
+**質問**: [Issues](https://github.com/nishimoto265/Claude-Code-Communication/issues) へどうぞ！
 
 
 ## 参考リンク
     
-・Claude Code公式   
+・ Claude Code 公式   
 　　URL: https://docs.anthropic.com/ja/docs/claude-code/overview   
     
-・Tmux Cheat Sheet & Quick Reference | Session, window, pane and more     
+・ Tmux Cheat Sheet & Quick Reference | Session, window, pane and more     
 　　URL: https://tmuxcheatsheet.com/   
      
-・Akira-Papa/Claude-Code-Communication   
+・ Akira-Papa/Claude-Code-Communication   
 　　URL: https://github.com/Akira-Papa/Claude-Code-Communication   
      
-・【tmuxでClaude CodeのMaxプランでAI組織を動かし放題のローカル環境ができた〜〜〜！ので、やり方をシェア！！🔥🔥🔥🙌☺️】 #AIエージェント - Qiita   
+・【tmux で Claude Code の Max プランで AI 組織を動かし放題のローカル環境ができた〜〜〜！ので、やり方をシェア！！🔥🔥🔥🙌☺️】 #AI エージェント - Qiita   
 　　URL: https://qiita.com/akira_papa_AI/items/9f6c6605e925a88b9ac5   
     
-・Claude Code コマンドチートシート完全ガイド #ClaudeCode - Qiita   
+・ Claude Code コマンドチートシート完全ガイド #ClaudeCode - Qiita   
 　　URL: https://qiita.com/akira_papa_AI/items/d68782fbf03ffd9b2f43   
     
     
-※以下の情報を参考に、今回のtmuxのClaude Code組織環境を構築することができました。本当にありがとうございました！☺️🙌   
+※以下の情報を参考に、今回の tmux の Claude Code 組織環境を構築することができました。本当にありがとうございました！☺️🙌   
     
-◇Claude Code双方向通信をシェルで一撃構築できるようにした発案者の元木さん   
-参考GitHub ：   
+◇Claude Code 双方向通信をシェルで一撃構築できるようにした発案者の元木さん   
+参考 GitHub ：   
 haconiwa/README_JA.md at main · dai-motoki/haconiwa  
 　　URL: https://github.com/dai-motoki/haconiwa/blob/main/README_JA.md   
     
 ・神威/KAMUI（@kamui_qai）さん / X   
 　　URL: https://x.com/kamui_qai   
     
-◇簡単にClaude Code双方向通信環境を構築できるようシェアして頂いたダイコンさん   
-参考GitHub：   
+◇簡単に Claude Code 双方向通信環境を構築できるようシェアして頂いたダイコンさん   
+参考 GitHub：   
 nishimoto265/Claude-Code-Communication   
 　　URL: https://github.com/nishimoto265/Claude-Code-Communication   
     
 ・ ダイコン（@daikon265）さん / X   
 　　URL: https://x.com/daikon265   
     
-◇Claude Code公式解説動画：   
+◇Claude Code 公式解説動画：   
 Mastering Claude Code in 30 minutes - YouTube   
 　　URL: https://www.youtube.com/live/6eBSHbLKuN0?t=1356s  
    

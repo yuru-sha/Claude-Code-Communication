@@ -4,6 +4,8 @@ import { Server } from 'socket.io';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import fs from 'fs/promises';
+import archiver from 'archiver';
 import { db, Task, UsageLimitState } from './database';
 
 const execAsync = promisify(exec);
@@ -116,8 +118,8 @@ let taskCompletionPatterns = [
   /プロジェクト完全成功を正式に宣言[。！]/,
   
   // フォールバック用の一般的なパターン
-  /(?:タスク|プロジェクト|作業|開発)(?:が|を)?(?:完全に|すべて)?(?:完了|終了|完成)(?:いたし|し)ました[。！]/i,
-  /(?:すべて|全て)(?:の)?(?:作業|実装|開発|機能)(?:が|を)?(?:完了|終了|完成)(?:いたし|し)ました[。！]/i,
+  /(?:タスク|プロジェクト|作業|開発)(?:が|を)?(?:完全に|すべて)?(?:完了|終了|完成)(?:いたし|し) ました[。！]/i,
+  /(?:すべて|全て)(?:の)?(?:作業|実装|開発|機能)(?:が|を)?(?:完了|終了|完成)(?:いたし|し) ました[。！]/i,
   
   // 英語の完了パターン
   /(?:task|project|work|development)(?:\s+has\s+been|\s+is)?\s+(?:successfully\s+)?(?:completed|finished|done)[.!]/i,
@@ -441,7 +443,7 @@ const scheduleHealthCheck = () => {
   // 初回実行
   performHealthCheck();
 
-  // 15秒ごとにチェック（負荷軽減）
+  // 15 秒ごとにチェック（負荷軽減）
   setInterval(async () => {
     const health = await performHealthCheck();
 
@@ -462,7 +464,7 @@ const scheduleHealthCheck = () => {
 // 個別エージェントの完了チェック関数
 const checkAgentCompletion = async (agent: { name: string; target: string }, inProgressTasks: Task[]): Promise<boolean> => {
   try {
-    // 最新のターミナル出力を取得（最後の100行、タイムアウト付き）
+    // 最新のターミナル出力を取得（最後の 100 行、タイムアウト付き）
     const { stdout } = await execAsync(`timeout 5s tmux capture-pane -t "${agent.target}" -p -S -100 -E -1`);
     const currentOutput = stdout.trim();
 
@@ -503,7 +505,7 @@ const checkAgentCompletion = async (agent: { name: string; target: string }, inP
             const now = new Date();
             const elapsedMinutes = (now.getTime() - taskStartTime.getTime()) / (1000 * 60);
 
-            if (elapsedMinutes >= 2) { // 最低2分は作業時間が必要
+            if (elapsedMinutes >= 2) { // 最低 2 分は作業時間が必要
               console.log(`✅ Auto-completing task: ${agentTask.title} (elapsed: ${Math.round(elapsedMinutes)}min)`);
 
               // タスクを完了状態に更新
@@ -591,7 +593,7 @@ const checkTaskCompletion = async (): Promise<void> => {
   // President が完了宣言していない場合のみ、他のエージェントをチェック
   const checkPromises = otherAgents.map(async (agent) => {
     try {
-      // 最新のターミナル出力を取得（最後の100行、タイムアウト付き）
+      // 最新のターミナル出力を取得（最後の 100 行、タイムアウト付き）
       const { stdout } = await execAsync(`timeout 5s tmux capture-pane -t "${agent.target}" -p -S -100 -E -1`);
       const currentOutput = stdout.trim();
 
@@ -623,7 +625,7 @@ const checkTaskCompletion = async (): Promise<void> => {
                 const now = new Date();
                 const elapsedMinutes = (now.getTime() - taskStartTime.getTime()) / (1000 * 60);
 
-                if (elapsedMinutes >= 2) { // 最低2分は作業時間が必要
+                if (elapsedMinutes >= 2) { // 最低 2 分は作業時間が必要
                   console.log(`✅ Auto-completing task: ${agentTask.title} (elapsed: ${Math.round(elapsedMinutes)}min)`);
 
                   // タスクを完了状態に更新
@@ -685,12 +687,12 @@ const startTaskCompletionMonitoring = () => {
   isTaskCompletionCheckActive = true;
   console.log('🔍 Task completion monitoring started');
 
-  // 45秒ごとにチェック（頻度を下げて精度向上）
+  // 45 秒ごとにチェック（頻度を下げて精度向上）
   const completionCheckInterval = setInterval(async () => {
     await checkTaskCompletion();
   }, 45000);
 
-  // 初回実行（10秒後に開始）
+  // 初回実行（10 秒後に開始）
   setTimeout(() => checkTaskCompletion(), 10000);
 
   return completionCheckInterval;
@@ -758,14 +760,14 @@ const setUsageLimit = async (errorMessage: string) => {
   let nextRetryAt: Date;
   let retryMessage: string;
 
-  // Claude Codeメッセージから時刻を抽出
+  // Claude Code メッセージから時刻を抽出
   const timeMatch = errorMessage.match(/reset at (\d{1,2})(am|pm) \(Asia\/Tokyo\)/i);
 
   if (timeMatch) {
     const hour = parseInt(timeMatch[1]);
     const period = timeMatch[2].toLowerCase();
 
-    // 24時間形式に変換
+    // 24 時間形式に変換
     let resetHour = hour;
     if (period === 'pm' && hour !== 12) {
       resetHour = hour + 12;
@@ -930,8 +932,43 @@ const createWorkspaceDir = async (projectName: string): Promise<void> => {
   }
 };
 
+// プロジェクト開始時のクリア処理
+const performProjectStartCleanup = async (): Promise<void> => {
+  try {
+    console.log('🚀 Performing project start cleanup...');
+
+    // 各エージェントの Claude Code に /clear を送信
+    const agents = [
+      { name: 'president', target: 'president' },
+      { name: 'boss1', target: 'multiagent:0.0' },
+      { name: 'worker1', target: 'multiagent:0.1' },
+      { name: 'worker2', target: 'multiagent:0.2' },
+      { name: 'worker3', target: 'multiagent:0.3' }
+    ];
+
+    for (const agent of agents) {
+      try {
+        // /clear を送信してセッションをクリア
+        await execAsync(`tmux send-keys -t "${agent.target}" '/clear' C-m`);
+        await new Promise(resolve => setTimeout(resolve, 500)); // 少し待機
+
+        console.log(`✅ Claude Code session cleared in ${agent.name} for new project`);
+      } catch (error) {
+        console.warn(`Warning clearing Claude Code in ${agent.name}:`, error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+
+    console.log('✅ Project start cleanup completed');
+  } catch (error) {
+    console.error('❌ Error during project start cleanup:', error);
+  }
+};
+
 // タスクを President に送信
 const assignTaskToPresident = async (task: Task) => {
+  // プロジェクト開始時のクリア処理を実行
+  await performProjectStartCleanup();
+
   // タイトルからプロジェクト名を生成（簡易版）
   const projectName = task.title.toLowerCase()
     .replace(/\s+/g, '-')
@@ -1230,6 +1267,132 @@ app.get('/api/system-health', async (req, res) => {
   }
 });
 
+// プロジェクトファイル一覧取得 API
+app.get('/api/projects/:projectName/files', async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const projectPath = path.join(__dirname, '../../workspace', projectName);
+    
+    // プロジェクトディレクトリの存在確認
+    try {
+      await fs.access(projectPath);
+    } catch {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    const files = await getProjectFileList(projectPath, '');
+    const stats = await fs.stat(projectPath);
+    
+    const projectStructure = {
+      name: projectName,
+      path: projectPath,
+      files,
+      totalSize: files.reduce((total, file) => total + file.size, 0),
+      lastModified: stats.mtime
+    };
+
+    res.json(projectStructure);
+  } catch (error) {
+    console.error('Error getting project files:', error);
+    res.status(500).json({ error: 'Failed to get project files' });
+  }
+});
+
+// プロジェクト Zip ダウンロード API
+app.get('/api/projects/:projectName/download/zip', async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    const projectPath = path.join(__dirname, '../../workspace', projectName);
+    
+    // プロジェクトディレクトリの存在確認
+    try {
+      await fs.access(projectPath);
+    } catch {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // ZIP ファイル名とヘッダー設定
+    const zipFilename = `${projectName}-${new Date().toISOString().split('T')[0]}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
+
+    // アーカイバーを作成
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    
+    // エラーハンドリング
+    archive.on('error', (err) => {
+      console.error('Archive error:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to create zip archive' });
+      }
+    });
+
+    // アーカイブをレスポンスにパイプ
+    archive.pipe(res);
+
+    // プロジェクトディレクトリを再帰的にアーカイブに追加
+    archive.directory(projectPath, projectName);
+
+    // アーカイブを完了
+    await archive.finalize();
+
+  } catch (error) {
+    console.error('Error creating project zip:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to create project zip' });
+    }
+  }
+});
+
+// プロジェクトファイル一覧取得のヘルパー関数
+const getProjectFileList = async (dirPath: string, relativePath: string): Promise<any[]> => {
+  const files: any[] = [];
+  
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      const entryRelativePath = path.join(relativePath, entry.name);
+      
+      // 隠しファイルや node_modules などをスキップ
+      if (entry.name.startsWith('.') || 
+          entry.name === 'node_modules' || 
+          entry.name === '__pycache__' ||
+          entry.name === '.git') {
+        continue;
+      }
+
+      const stats = await fs.stat(fullPath);
+      
+      if (entry.isDirectory()) {
+        files.push({
+          path: entryRelativePath,
+          name: entry.name,
+          size: 0,
+          type: 'directory',
+          modified: stats.mtime
+        });
+        
+        // 再帰的にサブディレクトリを処理
+        const subFiles = await getProjectFileList(fullPath, entryRelativePath);
+        files.push(...subFiles);
+      } else {
+        files.push({
+          path: entryRelativePath,
+          name: entry.name,
+          size: stats.size,
+          type: 'file',
+          modified: stats.mtime
+        });
+      }
+    }
+  } catch (error) {
+    console.error(`Error reading directory ${dirPath}:`, error);
+  }
+  
+  return files;
+};
 
 io.on('connection', async (socket) => {
   console.log('🔌 User connected:', socket.id);
@@ -1243,6 +1406,50 @@ io.on('connection', async (socket) => {
     paused: initialTaskCounts.paused,
     failed: initialTaskCounts.failed,
     tasks: taskQueue.slice(-10) // 最新 10 件のタスクを送信
+  });
+
+  // タスク削除
+  socket.on('delete-task', async (taskId: string) => {
+    try {
+      // タスク情報を削除前に取得（プロジェクト名を確認するため）
+      const task = taskQueue.find(t => t.id === taskId);
+      
+      const success = await db.deleteTask(taskId);
+      
+      if (success) {
+        // workspace/以下のプロジェクトディレクトリも削除
+        if (task?.projectName) {
+          try {
+            const projectPath = path.join(__dirname, '../../workspace', task.projectName);
+            
+            // プロジェクトディレクトリが存在するか確認
+            try {
+              await fs.access(projectPath);
+              // 存在する場合は削除
+              await execAsync(`rm -rf "${projectPath}"`);
+              console.log(`🗂️ Project directory deleted: workspace/${task.projectName}`);
+            } catch (accessError) {
+              // ディレクトリが存在しない場合はスキップ
+              console.log(`ℹ️ Project directory not found (already deleted): workspace/${task.projectName}`);
+            }
+          } catch (error) {
+            console.warn(`⚠️ Failed to delete project directory for ${task.projectName}:`, error instanceof Error ? error.message : 'Unknown error');
+          }
+        }
+        
+        await refreshTaskCache();
+        
+        // 全クライアントにタスク削除を通知
+        io.emit('task-deleted', { taskId, projectName: task?.projectName });
+        console.log(`🗑️ Task deleted: ${taskId}${task?.projectName ? ` (project: ${task.projectName})` : ''}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to delete task:', error);
+      socket.emit('task-error', {
+        message: 'Failed to delete task',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   });
 
   socket.on('disconnect', () => {

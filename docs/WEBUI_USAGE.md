@@ -2,7 +2,7 @@
 
 ## 概要
 
-Claude Code Communication の Web UI は、複数の Claude Code エージェントが協力してタスクを実行する様子をリアルタイムで監視・管理できる企業レベルのダッシュボードです。
+Claude Code Communication の Web UI は、複数の Claude Code エージェントが協力してタスクを実行する様子をリアルタイムで監視・管理できるダッシュボードです。
 
 ## 機能
 
@@ -80,22 +80,26 @@ npm run dev:frontend  # フロントエンドのみ（ポート 3000）
 - **Active Agents**: 稼働中エージェント数とステータスドット
 
 #### Task Pipeline （左下パネル）
-- **統計チップ**: Pending、Active、Done、Failed の件数表示
+- **フィルター機能**: 検索、ステータス、プロジェクト別のタスク絞り込み
+- **統計チップ**: Pending、In Progress、Done、Failed の件数表示（2 列 2 行レイアウト）
+  - クリックでステータス別フィルタリング可能
 - **タスクカード**: 各タスクの詳細情報と進捗バー
 - **失敗情報**: エラー理由、再試行履歴、エラー履歴の詳細表示
-- **再実行ボタン**: 失敗したタスクの再実行
+- **タスク操作**: 再実行ボタン、削除ボタン（workspace/ディレクトリも含む完全削除）
+- **プロジェクトダウンロード**: 完了タスクのプロジェクトファイルを ZIP 形式でダウンロード
 
 #### Agent Status （右上パネル）
 - **リアルタイムステータス**: 各エージェントの現在状態
 - **作業内容**: 現在担当しているタスク名
 - **効率指標**: エージェントの作業効率パーセンテージ
 - **ステータス色分け**: 
-  - **緑（working）**: 作業中
-  - **黄（idle）**: 待機中
-  - **赤（offline）**: オフライン
+  - **🟢 緑（working）**: 作業中（積極的に動作）
+  - **🟡 オレンジ（idle）**: 待機中（起動済みだが作業なし）
+  - **🔴 赤（offline）**: オフライン（未起動または障害）
 
 #### Tabbed Terminals （右下パネル）
 - **タブ切り替え**: President、Boss1、Worker1-3 のターミナル
+- **ステータス表示**: 各タブに色付きドットでエージェント状態を表示
 - **リアルタイム出力**: 各エージェントのターミナル出力をリアルタイム表示
 - **自動スクロール**: 最新の出力を自動で表示
 
@@ -189,15 +193,18 @@ Claude-Code-Communication/
 #### クライアント → サーバー
 - `request-task`: 新しいタスクの送信
 - `task-completed`: タスク完了通知
+- `delete-task`: タスク削除（workspace/ディレクトリも含む）
 - `request-manual-recovery`: 手動復旧要求
 - `toggle-task-completion-monitoring`: タスク完了監視の切り替え
 - `retry-task`: 失敗タスクの再実行
+- `mark-task-failed`: タスクを失敗状態にマーク
 
 #### サーバー → クライアント
 - `task-queued`: タスクがキューに追加
 - `task-assigned`: タスクがエージェントに割り当て
 - `task-completed`: タスク完了
 - `task-failed`: タスク失敗
+- `task-deleted`: タスク削除完了（プロジェクトディレクトリ削除含む）
 - `task-queue-updated`: キュー状態の更新
 - `agent-status-updated`: エージェント状態更新
 - `system-health-updated`: システムヘルス更新
