@@ -112,7 +112,7 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed }: TaskPipel
                     {task.projectName && (
                       <div className="meta-item">
                         <span className="meta-label">Project:</span>
-                        <span className="meta-value">/workspace/projects/{task.projectName}</span>
+                        <span className="meta-value">workspace/{task.projectName}</span>
                       </div>
                     )}
                   </div>

@@ -211,27 +211,41 @@ function App() {
     };
   }, [socket]);
 
-  // Fetch terminal output for all agents
+  // Fetch terminal output for all agents (改善版)
   useEffect(() => {
-    const fetchTerminalOutput = async (agentId: string) => {
+    let isMounted = true;
+    let fetchController: AbortController | null = null;
+
+    const fetchTerminalOutput = async (agentId: string, signal?: AbortSignal) => {
       try {
         const response = await fetch(`http://localhost:3001/api/terminal/${agentId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'text/plain',
           },
+          signal,
+          // タイムアウトを追加
+          ...(window.fetch && { timeout: 8000 })
         });
+        
+        if (!isMounted || signal?.aborted) return;
         
         if (response.ok) {
           const text = await response.text();
-          setTerminalOutputs(prev => ({ ...prev, [agentId]: text }));
+          if (isMounted) {
+            setTerminalOutputs(prev => ({ ...prev, [agentId]: text }));
+          }
         } else {
-          setTerminalOutputs(prev => ({ 
-            ...prev, 
-            [agentId]: `Error: Unable to fetch terminal output (${response.status})` 
-          }));
+          if (isMounted) {
+            setTerminalOutputs(prev => ({ 
+              ...prev, 
+              [agentId]: `Error: Unable to fetch terminal output (${response.status})` 
+            }));
+          }
         }
       } catch (error) {
+        if (!isMounted || signal?.aborted) return;
+        
         setTerminalOutputs(prev => ({ 
           ...prev, 
           [agentId]: `Network Error: ${error instanceof Error ? error.message : 'Unknown error'}` 
@@ -240,23 +254,49 @@ function App() {
     };
 
     const fetchAllTerminalOutputs = async () => {
-      // 選択されたエージェントを優先的に更新
-      if (selectedAgent) {
-        await fetchTerminalOutput(selectedAgent);
+      if (!isMounted) return;
+      
+      // 前回のリクエストをキャンセル
+      if (fetchController) {
+        fetchController.abort();
       }
       
-      // その他のエージェントは少し遅延させて更新
-      agents.forEach((agent, index) => {
-        if (agent.id !== selectedAgent) {
-          setTimeout(() => fetchTerminalOutput(agent.id), index * 200);
+      fetchController = new AbortController();
+      const signal = fetchController.signal;
+
+      try {
+        // 選択されたエージェントを優先的に更新
+        if (selectedAgent) {
+          await fetchTerminalOutput(selectedAgent, signal);
         }
-      });
+        
+        // その他のエージェントを並列で更新（遅延なし）
+        const otherAgents = agents.filter(agent => agent.id !== selectedAgent);
+        const fetchPromises = otherAgents.map(agent => 
+          fetchTerminalOutput(agent.id, signal)
+        );
+        
+        await Promise.allSettled(fetchPromises);
+      } catch (error) {
+        if (!signal.aborted) {
+          console.warn('Terminal fetch error:', error);
+        }
+      }
     };
 
+    // 初回実行
     fetchAllTerminalOutputs();
-    const interval = setInterval(fetchAllTerminalOutputs, 5000); // 5 秒間隔に変更
+    
+    // 間隔を8秒に延長（負荷軽減）
+    const interval = setInterval(fetchAllTerminalOutputs, 8000);
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      if (fetchController) {
+        fetchController.abort();
+      }
+      clearInterval(interval);
+    };
   }, [agents, selectedAgent]);
 
   const handleSubmitTask = useCallback(() => {
@@ -657,7 +697,7 @@ function App() {
                             {task.projectName && (
                               <div className="meta-item">
                                 <span className="meta-label">Project:</span>
-                                <span className="meta-value">/workspace/projects/{task.projectName}</span>
+                                <span className="meta-value">workspace/{task.projectName}</span>
                               </div>
                             )}
                           </div>

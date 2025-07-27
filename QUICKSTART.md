@@ -167,7 +167,7 @@ Claude-Code-Communication/
    ```
 
 2. **期待される成果物**:
-   - `/workspace/projects/rest-api-development/` 配下に成果物
+   - `workspace/rest-api-development/` 配下に成果物
    - API 仕様書
    - テストコード
    - デプロイ用設定

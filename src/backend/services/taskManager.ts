@@ -101,7 +101,7 @@ export const sendToAgent = async (
 // workspace ディレクトリを作成
 export const createWorkspaceDir = async (projectName: string): Promise<void> => {
   try {
-    const workspaceDir = `/workspace/projects/${projectName}`;
+    const workspaceDir = `workspace/${projectName}`;
     await execAsync(`mkdir -p "${workspaceDir}"`);
     console.log(`📁 Created workspace directory: ${workspaceDir}`);
   } catch (error) {
@@ -135,7 +135,7 @@ export const assignTaskToPresident = async (
 【推奨プロジェクト名】${projectName}
 
 このタスクをチームに指示して、効率的に実行してください。
-作業は /workspace/projects/${projectName} で行うよう指示してください。
+作業は workspace/${projectName} で行うよう指示してください。
 CLAUDE.md と instructions/president.md の内容に従って進めてください。`;
 
   const success = await sendToAgentFn('president', presidentMessage);

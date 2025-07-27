@@ -147,7 +147,7 @@ export const TaskFlow = () => {
                       )}
                       {(task as any).projectName && (
                         <div className="text-xs text-blue-400 mt-1">
-                          📁 /workspace/projects/{(task as any).projectName}
+                          📁 workspace/{(task as any).projectName}
                         </div>
                       )}
                     </div>

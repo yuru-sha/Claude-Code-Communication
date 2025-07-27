@@ -91,12 +91,12 @@ interface SystemHealth {
 
 let systemHealthStatus: SystemHealth = {
   tmuxSessions: { president: false, multiagent: false },
-  claudeAgents: { 
-    president: false, 
-    boss1: false, 
-    worker1: false, 
-    worker2: false, 
-    worker3: false 
+  claudeAgents: {
+    president: false,
+    boss1: false,
+    worker1: false,
+    worker2: false,
+    worker3: false
   },
   overallHealth: 'critical',
   timestamp: new Date()
@@ -106,30 +106,33 @@ let systemHealthStatus: SystemHealth = {
 let isRecoveryInProgress = false;
 let lastRecoveryAttempt = 0;
 
-// タスク完了検知の状態
+// タスク完了検知の状態（改善版）
 let isTaskCompletionCheckActive = false;
+
+// より厳密な完了パターン（誤検知を減らす）
 let taskCompletionPatterns = [
-  // 日本語の完了パターン
-  /(?:タスク|プロジェクト|作業)(?:が|を)?(?:完了|終了|完成)(?:しました|した|です)/i,
-  /(?:すべて|全て)(?:の)?(?:作業|実装|開発)(?:が|を)?(?:完了|終了|完成)(?:しました|した|です)/i,
-  /(?:納品|デリバリー|配信)(?:完了|終了)(?:しました|した|です)/i,
-  /(?:プロジェクト|システム)(?:が|を)?(?:正常に|うまく)?(?:動作|稼働)(?:しています|している|します)/i,
-  /(?:テスト|検証)(?:も)?(?:すべて|全て)?(?:完了|終了|成功)(?:しました|した|です)/i,
-  /(?:成果物|deliverables?)(?:が|を)?(?:すべて|全て)?(?:完成|作成|生成)(?:しました|した|です)/i,
+  // President の正式完了宣言（最優先）
+  /プロジェクト正式完了を宣言します[。！]/,
+  /プロジェクト完全成功を正式に宣言[。！]/,
+  
+  // フォールバック用の一般的なパターン
+  /(?:タスク|プロジェクト|作業|開発)(?:が|を)?(?:完全に|すべて)?(?:完了|終了|完成)(?:いたし|し)ました[。！]/i,
+  /(?:すべて|全て)(?:の)?(?:作業|実装|開発|機能)(?:が|を)?(?:完了|終了|完成)(?:いたし|し)ました[。！]/i,
   
   // 英語の完了パターン
-  /(?:task|project|work)(?:\s+is)?\s+(?:completed|finished|done|ready)/i,
-  /(?:all|everything)(?:\s+is)?\s+(?:completed|finished|done|ready)/i,
-  /(?:successfully|completely)\s+(?:completed|finished|implemented)/i,
-  /(?:project|system|application)\s+is\s+(?:working|running|operational)/i,
-  /(?:testing|verification)\s+(?:completed|passed|successful)/i,
-  /(?:deliverables?|output|result)\s+(?:are\s+)?(?:completed|ready|generated)/i,
-  
-  // 記号や絵文字を含むパターン
-  /✅.*(?:完了|完成|終了|done|completed)/i,
-  /🎉.*(?:完了|完成|終了|done|completed)/i,
-  /.*(?:完了|終了|完成|done|completed).*✅/i,
-  /.*(?:完了|終了|完成|done|completed).*🎉/i
+  /(?:task|project|work|development)(?:\s+has\s+been|\s+is)?\s+(?:successfully\s+)?(?:completed|finished|done)[.!]/i,
+  /(?:all|everything)(?:\s+has\s+been|\s+is)?\s+(?:successfully\s+)?(?:completed|finished|done)[.!]/i
+];
+
+// 誤検知を避けるための除外パターン
+let taskCompletionExcludePatterns = [
+  /(?:まだ|まだまだ|まだ未|未だ).*(?:完了|完成|終了)/i,
+  /(?:完了|完成|終了).*(?:していません|できません|しません)/i,
+  /(?:完了|完成|終了).*(?:予定|見込み|目標)/i,
+  /(?:完了|完成|終了).*(?:したい|したく|する予定)/i,
+  /(?:完了|完成|終了).*(?:でしょうか|ですか|？)/i,
+  /(?:not\s+)?(?:completed|finished|done).*(?:yet|still|pending)/i,
+  /(?:will\s+be|going\s+to\s+be|planning\s+to).*(?:completed|finished|done)/i
 ];
 
 // 各エージェントの最後のターミナル出力を保存
@@ -150,7 +153,7 @@ const checkTmuxSessions = async (): Promise<{ president: boolean; multiagent: bo
   }
 };
 
-// Claude Code の起動状態をチェック
+// Claude Code の起動状態をチェック（改善版）
 const checkClaudeAgents = async (): Promise<typeof systemHealthStatus.claudeAgents> => {
   const agents = {
     president: false,
@@ -169,41 +172,66 @@ const checkClaudeAgents = async (): Promise<typeof systemHealthStatus.claudeAgen
     { name: 'worker3', target: 'multiagent:0.3' }
   ];
 
-  for (const agent of agentTargets) {
+  // 並列処理で高速化
+  const checkPromises = agentTargets.map(async (agent) => {
     try {
-      // ターミナル出力をチェック（fullscreen 出力を取得）
-      const { stdout } = await execAsync(`tmux capture-pane -t "${agent.target}" -p`);
-      
-      // より包括的なパターンマッチング
-      const claudePatterns = [
-        'Human:', 'Assistant:', 'claude', 'Claude Code',
-        '? for shortcuts', 'IDE disconnected', 'Bypassing Permissions',
-        'Brewing', 'tokens', 'esc to interrupt', 'claudecode',
-        '⚒', '◯', '✻', '>', 'Usage:', 'Continue:', 'Provide'
-      ];
-      
-      const isClaudeRunning = claudePatterns.some(pattern => stdout.includes(pattern));
-      
-      // tmux セッション内のプロセスもチェック
+      // 1. プロセス情報を優先的にチェック（より確実）
       let hasClaudeProcess = false;
       try {
         const { stdout: paneInfo } = await execAsync(`tmux list-panes -t "${agent.target}" -F "#{pane_current_command}"`);
-        hasClaudeProcess = paneInfo.includes('claude') || paneInfo.includes('node') || paneInfo.includes('bash');
+        hasClaudeProcess = paneInfo.includes('claude') || paneInfo.includes('node');
       } catch (paneError) {
         // ペイン情報取得失敗時は無視
       }
-      
-      // どちらかの方法で検知できれば OK
-      const finalDetection = isClaudeRunning || hasClaudeProcess;
-      agents[agent.name as keyof typeof agents] = finalDetection;
-      
-      // デバッグログ（全エージェントで詳細表示）
-      console.log(`🔍 ${agent.name}: terminal=${isClaudeRunning}, process=${hasClaudeProcess}, final=${finalDetection}`);
-      
+
+      // 2. ターミナル出力をチェック（補助的）
+      let isClaudeRunning = false;
+      try {
+        // タイムアウト付きでターミナル出力を取得
+        const { stdout } = await execAsync(`timeout 3s tmux capture-pane -t "${agent.target}" -p -S -50 -E -1`);
+
+        // より厳密なパターンマッチング
+        const claudePatterns = [
+          /Human:/,
+          /Assistant:/,
+          /claude.*code/i,
+          /\? for shortcuts/,
+          /Bypassing Permissions/,
+          /tokens.*remaining/i,
+          /esc to interrupt/,
+          /Continue:/,
+          /Provide/
+        ];
+
+        isClaudeRunning = claudePatterns.some(pattern => pattern.test(stdout));
+      } catch (terminalError) {
+        // ターミナル出力取得失敗時は無視
+      }
+
+      // 3. 最終判定（プロセス情報を優先）
+      const finalDetection = hasClaudeProcess || isClaudeRunning;
+
+      // 4. 状態変化のログ出力
+      const previousState = systemHealthStatus.claudeAgents[agent.name as keyof typeof systemHealthStatus.claudeAgents];
+      if (previousState !== finalDetection) {
+        console.log(`🔄 ${agent.name}: ${previousState ? 'online' : 'offline'} -> ${finalDetection ? 'online' : 'offline'} (process=${hasClaudeProcess}, terminal=${isClaudeRunning})`);
+      }
+
+      return { name: agent.name, status: finalDetection };
+
     } catch (error) {
-      console.warn(`Failed to check ${agent.name}:`, error);
+      console.warn(`Failed to check ${agent.name}:`, error instanceof Error ? error.message : 'Unknown error');
+      return { name: agent.name, status: false };
     }
-  }
+  });
+
+  // 並列実行の結果を待機
+  const results = await Promise.all(checkPromises);
+
+  // 結果をマージ
+  results.forEach(result => {
+    agents[result.name as keyof typeof agents] = result.status;
+  });
 
   return agents;
 };
@@ -215,21 +243,21 @@ let agentStatusCache: Record<string, { status: 'idle' | 'working' | 'offline', c
 const broadcastAgentStatusUpdate = (agentName: string, newStatus: 'idle' | 'working' | 'offline', currentTask?: string) => {
   // 既存の状態と比較
   const cached = agentStatusCache[agentName];
-  const hasChanged = !cached || 
-    cached.status !== newStatus || 
+  const hasChanged = !cached ||
+    cached.status !== newStatus ||
     cached.currentTask !== currentTask;
-  
+
   if (!hasChanged) {
     return; // 変更がない場合はブロードキャストしない
   }
-  
+
   // キャッシュを更新
   agentStatusCache[agentName] = {
     status: newStatus,
     currentTask: currentTask,
     lastUpdate: new Date()
   };
-  
+
   const agentUpdate = {
     id: agentName,
     name: agentName.charAt(0).toUpperCase() + agentName.slice(1),
@@ -237,7 +265,7 @@ const broadcastAgentStatusUpdate = (agentName: string, newStatus: 'idle' | 'work
     currentTask: currentTask,
     timestamp: new Date()
   };
-  
+
   console.log(`📡 Broadcasting agent status update: ${agentName} -> ${newStatus}${currentTask ? ` (task: ${currentTask})` : ''}`);
   io.emit('agent-status-updated', agentUpdate);
 };
@@ -246,25 +274,25 @@ const broadcastAgentStatusUpdate = (agentName: string, newStatus: 'idle' | 'work
 const performHealthCheck = async (): Promise<SystemHealth> => {
   const tmuxSessions = await checkTmuxSessions();
   const claudeAgents = await checkClaudeAgents();
-  
+
   // 前回の状態と比較してエージェント状態の変更を検知
   const previousClaudeAgents = systemHealthStatus.claudeAgents || {};
-  
+
   // 各エージェントの状態変更を個別に通知
   Object.keys(claudeAgents).forEach(agentName => {
     const currentStatus = claudeAgents[agentName as keyof typeof claudeAgents];
     const previousStatus = previousClaudeAgents[agentName as keyof typeof previousClaudeAgents];
-    
+
     if (currentStatus !== previousStatus) {
       const status = currentStatus ? 'idle' : 'offline';
       broadcastAgentStatusUpdate(agentName, status);
     }
   });
-  
+
   // 全体的な健全性を判定
   const tmuxHealthy = tmuxSessions.president && tmuxSessions.multiagent;
   const agentCount = Object.values(claudeAgents).filter(Boolean).length;
-  
+
   let overallHealth: 'healthy' | 'degraded' | 'critical' = 'critical';
   if (tmuxHealthy && agentCount === 5) {
     overallHealth = 'healthy';
@@ -280,7 +308,7 @@ const performHealthCheck = async (): Promise<SystemHealth> => {
   };
 
   systemHealthStatus = health;
-  
+
   // 健全性に問題があればログ出力
   if (overallHealth !== 'healthy') {
     console.warn(`⚠️ System health: ${overallHealth}`);
@@ -311,7 +339,7 @@ const performAutoRecovery = async (health: SystemHealth, isManual: boolean = fal
 
   isRecoveryInProgress = true;
   lastRecoveryAttempt = now;
-  
+
   console.log('🔧 Starting auto recovery process...');
   let recoveryPerformed = false;
 
@@ -319,19 +347,19 @@ const performAutoRecovery = async (health: SystemHealth, isManual: boolean = fal
     // tmux セッションが起動していない場合は起動
     if (!health.tmuxSessions.president || !health.tmuxSessions.multiagent) {
       console.log('🔧 Attempting to start tmux sessions...');
-      
+
       if (!health.tmuxSessions.president) {
         await execAsync('tmux new-session -d -s president');
         console.log('✅ Started president tmux session');
         recoveryPerformed = true;
       }
-      
+
       if (!health.tmuxSessions.multiagent) {
         await execAsync('tmux new-session -d -s multiagent \\; split-window -h \\; split-window -v \\; select-pane -t 0 \\; split-window -v');
         console.log('✅ Started multiagent tmux session with 4 panes');
         recoveryPerformed = true;
       }
-      
+
       // tmux セッション起動後、少し待機
       if (recoveryPerformed) {
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -354,7 +382,7 @@ const performAutoRecovery = async (health: SystemHealth, isManual: boolean = fal
           await execAsync(`tmux send-keys -t "${agent.target}" 'claude --dangerously-skip-permissions' C-m`);
           console.log(`✅ Started Claude Code for ${agent.name}`);
           recoveryPerformed = true;
-          
+
           // エージェント間で少し間隔を空ける
           await new Promise(resolve => setTimeout(resolve, 1000));
         } catch (error) {
@@ -365,7 +393,7 @@ const performAutoRecovery = async (health: SystemHealth, isManual: boolean = fal
 
     if (recoveryPerformed) {
       console.log('🔧 Auto recovery completed. Waiting for services to stabilize...');
-      
+
       // 復旧後の通知
       io.emit('auto-recovery-performed', {
         message: 'System auto-recovery performed. Services are starting up.',
@@ -375,32 +403,32 @@ const performAutoRecovery = async (health: SystemHealth, isManual: boolean = fal
         },
         timestamp: new Date()
       });
-      
+
       // 復旧後、30 秒待ってから再チェック
       setTimeout(async () => {
         const newHealth = await performHealthCheck();
         const activeAgents = Object.values(newHealth.claudeAgents).filter(Boolean).length;
-        
+
         io.emit('auto-recovery-status', {
           message: `Auto recovery status: ${activeAgents}/5 Claude agents online`,
           health: newHealth,
           timestamp: new Date()
         });
       }, 30000);
-      
+
       return true;
     }
 
     return false;
   } catch (error) {
     console.error('❌ Error during auto recovery:', error);
-    
+
     io.emit('auto-recovery-failed', {
       message: 'Auto recovery failed',
       error: error instanceof Error ? error.message : 'Unknown error',
       timestamp: new Date()
     });
-    
+
     return false;
   } finally {
     // 復旧処理完了フラグをリセット
@@ -408,126 +436,263 @@ const performAutoRecovery = async (health: SystemHealth, isManual: boolean = fal
   }
 };
 
-// 定期的なヘルスチェック（自動復旧機能付き）
+// 定期的なヘルスチェック（最適化版）
 const scheduleHealthCheck = () => {
   // 初回実行
   performHealthCheck();
-  
-  // 10 秒ごとにチェック（より頻繁に）
+
+  // 15秒ごとにチェック（負荷軽減）
   setInterval(async () => {
     const health = await performHealthCheck();
-    
-    // 自動復旧トリガー条件
+
+    // 自動復旧トリガー条件（より慎重に）
     if (health.overallHealth === 'critical') {
       const activeAgents = Object.values(health.claudeAgents).filter(Boolean).length;
       const tmuxHealthy = health.tmuxSessions.president && health.tmuxSessions.multiagent;
-      
-      // 復旧条件：tmux が落ちているか、Claude エージェントが 2 個以下の場合
-      if (!tmuxHealthy || activeAgents <= 2) {
+
+      // 復旧条件：tmux が落ちているか、Claude エージェントが 1 個以下の場合（より厳しく）
+      if (!tmuxHealthy || activeAgents <= 1) {
         console.log(`⚠️ Auto recovery triggered - tmux: ${tmuxHealthy}, agents: ${activeAgents}/5`);
         await performAutoRecovery(health);
       }
     }
-  }, 10000);
+  }, 15000);
 };
 
-// タスク完了検知関数
+// 個別エージェントの完了チェック関数
+const checkAgentCompletion = async (agent: { name: string; target: string }, inProgressTasks: Task[]): Promise<boolean> => {
+  try {
+    // 最新のターミナル出力を取得（最後の100行、タイムアウト付き）
+    const { stdout } = await execAsync(`timeout 5s tmux capture-pane -t "${agent.target}" -p -S -100 -E -1`);
+    const currentOutput = stdout.trim();
+
+    // 前回の出力と比較して新しい内容があるかチェック
+    const lastOutput = lastTerminalOutputs[agent.name] || '';
+
+    if (currentOutput !== lastOutput) {
+      // 新しい部分のみを抽出
+      const newContent = currentOutput.replace(lastOutput, '').trim();
+
+      if (newContent.length > 0) {
+        // President の場合は正式完了宣言のみをチェック
+        let completionMatch = false;
+        if (agent.name === 'president') {
+          const presidentCompletionPatterns = [
+            /プロジェクト正式完了を宣言します[。！]/,
+            /プロジェクト完全成功を正式に宣言[。！]/
+          ];
+          completionMatch = presidentCompletionPatterns.some(pattern => pattern.test(newContent));
+        } else {
+          // 他のエージェントは除外パターンをチェック後、一般的なパターンをチェック
+          const hasExcludePattern = taskCompletionExcludePatterns.some(pattern => pattern.test(newContent));
+          if (!hasExcludePattern) {
+            completionMatch = taskCompletionPatterns.slice(1).some(pattern => pattern.test(newContent)); // 正式完了宣言以外のパターン
+          }
+        }
+
+        if (completionMatch) {
+          console.log(`🎯 Task completion detected in ${agent.name} terminal`);
+          console.log(`📝 Completion text: ${newContent.split('\n').slice(-3).join(' | ')}`);
+
+          // 該当エージェントが担当している進行中タスクを見つける
+          const agentTask = inProgressTasks.find(task => task.assignedTo === agent.name);
+
+          if (agentTask) {
+            // 追加の検証：タスクが実際に開始されてから一定時間経過しているか
+            const taskStartTime = new Date(agentTask.updatedAt || agentTask.createdAt);
+            const now = new Date();
+            const elapsedMinutes = (now.getTime() - taskStartTime.getTime()) / (1000 * 60);
+
+            if (elapsedMinutes >= 2) { // 最低2分は作業時間が必要
+              console.log(`✅ Auto-completing task: ${agentTask.title} (elapsed: ${Math.round(elapsedMinutes)}min)`);
+
+              // タスクを完了状態に更新
+              const updatedTask = await db.updateTask(agentTask.id, {
+                status: 'completed'
+              });
+
+              if (updatedTask) {
+                // メモリキャッシュを更新
+                await refreshTaskCache();
+
+                // エージェント状態の変更をブロードキャスト
+                broadcastAgentStatusUpdate(agent.name, 'idle');
+
+                // クライアントに通知
+                io.emit('task-completed', updatedTask);
+                console.log(`🎉 Task auto-completed: ${updatedTask.title}`);
+
+                // 完了検知のログを WebUI に送信
+                io.emit('task-completion-detected', {
+                  taskId: agentTask.id,
+                  taskTitle: agentTask.title,
+                  detectedBy: agent.name,
+                  completionText: newContent.split('\n').slice(-3).join('\n'),
+                  elapsedMinutes: Math.round(elapsedMinutes),
+                  timestamp: new Date()
+                });
+
+                // President の正式完了宣言の場合は専用クリーンアップを実行
+                if (agent.name === 'president' && (
+                  /プロジェクト正式完了を宣言します[。！]/.test(newContent) ||
+                  /プロジェクト完全成功を正式に宣言[。！]/.test(newContent)
+                )) {
+                  console.log('🎉 Project officially completed by President - performing project completion cleanup');
+                  setTimeout(() => performProjectCompletionCleanup(), 2000);
+                } else {
+                  // 次のタスクを処理（少し遅延）
+                  setTimeout(() => processTaskQueue(), 3000);
+                }
+
+                return true; // 完了処理が実行された
+              }
+            } else {
+              console.log(`⏳ Task completion detected but too early (${Math.round(elapsedMinutes)}min < 2min required)`);
+            }
+          }
+        }
+      }
+
+      // 最後の出力を更新
+      lastTerminalOutputs[agent.name] = currentOutput;
+    }
+  } catch (error) {
+    // ターミナルが利用できない場合はサイレントに無視
+    if (error instanceof Error && !error.message.includes('timeout')) {
+      console.warn(`Failed to check terminal ${agent.name}:`, error.message);
+    }
+  }
+
+  return false; // 完了処理が実行されなかった
+};
+
+// タスク完了検知関数（改善版）
 const checkTaskCompletion = async (): Promise<void> => {
   if (!isTaskCompletionCheckActive) return;
 
   const inProgressTasks = taskQueue.filter(t => t.status === 'in_progress');
   if (inProgressTasks.length === 0) return;
 
-  const agentTargets = [
-    { name: 'president', target: 'president' },
+  // President を最優先でチェック（正式完了宣言）
+  const presidentAgent = { name: 'president', target: 'president' };
+  const otherAgents = [
     { name: 'boss1', target: 'multiagent:0.0' },
     { name: 'worker1', target: 'multiagent:0.1' },
     { name: 'worker2', target: 'multiagent:0.2' },
     { name: 'worker3', target: 'multiagent:0.3' }
   ];
 
-  for (const agent of agentTargets) {
+  // まず President をチェック
+  const presidentCompleted = await checkAgentCompletion(presidentAgent, inProgressTasks);
+  if (presidentCompleted) {
+    return; // President が完了宣言した場合は他のエージェントはチェックしない
+  }
+
+  // President が完了宣言していない場合のみ、他のエージェントをチェック
+  const checkPromises = otherAgents.map(async (agent) => {
     try {
-      // 最新のターミナル出力を取得
-      const { stdout } = await execAsync(`tmux capture-pane -t "${agent.target}" -p | tail -50`);
+      // 最新のターミナル出力を取得（最後の100行、タイムアウト付き）
+      const { stdout } = await execAsync(`timeout 5s tmux capture-pane -t "${agent.target}" -p -S -100 -E -1`);
       const currentOutput = stdout.trim();
 
       // 前回の出力と比較して新しい内容があるかチェック
       const lastOutput = lastTerminalOutputs[agent.name] || '';
-      
+
       if (currentOutput !== lastOutput) {
-        // 新しい出力から完了パターンを検索
-        const completionMatch = taskCompletionPatterns.some(pattern => pattern.test(currentOutput));
-        
-        if (completionMatch) {
-          console.log(`🎯 Task completion detected in ${agent.name} terminal`);
-          
-          // 該当エージェントが担当している進行中タスクを見つける
-          const agentTask = inProgressTasks.find(task => task.assignedTo === agent.name);
-          
-          if (agentTask) {
-            console.log(`✅ Auto-completing task: ${agentTask.title}`);
-            
-            // タスクを完了状態に更新
-            const updatedTask = await db.updateTask(agentTask.id, { 
-              status: 'completed'
-            });
-            
-            if (updatedTask) {
-              // メモリキャッシュを更新
-              await refreshTaskCache();
-              
-              // エージェント状態の変更をブロードキャスト
-              broadcastAgentStatusUpdate(agent.name, 'idle');
-              
-              // クライアントに通知
-              io.emit('task-completed', updatedTask);
-              console.log(`🎉 Task auto-completed: ${updatedTask.title}`);
-              
-              // 完了時のクリーンアップ実行
-              console.log('🧹 Starting cleanup after auto-completion...');
-              await performTaskCompletionCleanup();
-              
-              // 次のタスクを処理
-              setTimeout(() => processTaskQueue(), 5000);
-              
-              // 完了検知のログを WebUI に送信
-              io.emit('task-completion-detected', {
-                taskId: agentTask.id,
-                taskTitle: agentTask.title,
-                detectedBy: agent.name,
-                completionText: currentOutput.split('\n').slice(-5).join('\n'), // 最後の 5 行
-                timestamp: new Date()
-              });
+        // 新しい部分のみを抽出
+        const newContent = currentOutput.replace(lastOutput, '').trim();
+
+        if (newContent.length > 0) {
+          // 除外パターンをチェック（誤検知を防ぐ）
+          const hasExcludePattern = taskCompletionExcludePatterns.some(pattern => pattern.test(newContent));
+
+          if (!hasExcludePattern) {
+            // 完了パターンをチェック
+            const completionMatch = taskCompletionPatterns.some(pattern => pattern.test(newContent));
+
+            if (completionMatch) {
+              console.log(`🎯 Task completion detected in ${agent.name} terminal`);
+              console.log(`📝 Completion text: ${newContent.split('\n').slice(-3).join(' | ')}`);
+
+              // 該当エージェントが担当している進行中タスクを見つける
+              const agentTask = inProgressTasks.find(task => task.assignedTo === agent.name);
+
+              if (agentTask) {
+                // 追加の検証：タスクが実際に開始されてから一定時間経過しているか
+                const taskStartTime = new Date(agentTask.updatedAt || agentTask.createdAt);
+                const now = new Date();
+                const elapsedMinutes = (now.getTime() - taskStartTime.getTime()) / (1000 * 60);
+
+                if (elapsedMinutes >= 2) { // 最低2分は作業時間が必要
+                  console.log(`✅ Auto-completing task: ${agentTask.title} (elapsed: ${Math.round(elapsedMinutes)}min)`);
+
+                  // タスクを完了状態に更新
+                  const updatedTask = await db.updateTask(agentTask.id, {
+                    status: 'completed'
+                  });
+
+                  if (updatedTask) {
+                    // メモリキャッシュを更新
+                    await refreshTaskCache();
+
+                    // エージェント状態の変更をブロードキャスト
+                    broadcastAgentStatusUpdate(agent.name, 'idle');
+
+                    // クライアントに通知
+                    io.emit('task-completed', updatedTask);
+                    console.log(`🎉 Task auto-completed: ${updatedTask.title}`);
+
+                    // 完了検知のログを WebUI に送信
+                    io.emit('task-completion-detected', {
+                      taskId: agentTask.id,
+                      taskTitle: agentTask.title,
+                      detectedBy: agent.name,
+                      completionText: newContent.split('\n').slice(-3).join('\n'),
+                      elapsedMinutes: Math.round(elapsedMinutes),
+                      timestamp: new Date()
+                    });
+
+                    // 次のタスクを処理（少し遅延）
+                    setTimeout(() => processTaskQueue(), 3000);
+                  }
+                } else {
+                  console.log(`⏳ Task completion detected but too early (${Math.round(elapsedMinutes)}min < 2min required)`);
+                }
+              }
             }
           }
         }
-        
+
         // 最後の出力を更新
         lastTerminalOutputs[agent.name] = currentOutput;
       }
     } catch (error) {
       // ターミナルが利用できない場合はサイレントに無視
-      // console.warn(`Failed to check terminal ${agent.name}:`, error);
+      if (error instanceof Error && !error.message.includes('timeout')) {
+        console.warn(`Failed to check terminal ${agent.name}:`, error.message);
+      }
     }
-  }
+  });
+
+  // 並列実行
+  await Promise.all(checkPromises);
 };
 
-// タスク完了検知の開始/停止
+// タスク完了検知の開始/停止（最適化版）
 const startTaskCompletionMonitoring = () => {
   if (isTaskCompletionCheckActive) return;
-  
+
   isTaskCompletionCheckActive = true;
   console.log('🔍 Task completion monitoring started');
-  
-  // 30 秒ごとにチェック
+
+  // 45秒ごとにチェック（頻度を下げて精度向上）
   const completionCheckInterval = setInterval(async () => {
     await checkTaskCompletion();
-  }, 30000);
-  
-  // 初回実行
-  setTimeout(() => checkTaskCompletion(), 5000);
-  
+  }, 45000);
+
+  // 初回実行（10秒後に開始）
+  setTimeout(() => checkTaskCompletion(), 10000);
+
   return completionCheckInterval;
 };
 
@@ -544,44 +709,105 @@ const initializeSystem = async () => {
   schedulePeriodicRefresh();
   scheduleHealthCheck();
   startTaskCompletionMonitoring();
-  
+
   console.log('🚀 Task queue system initialized with Prisma database, usage limit handling, and task completion monitoring');
 };
 
 // Usage limit 検知関数
 const detectUsageLimit = (errorMessage: string): boolean => {
-  const usageLimitPatterns = [
-    /usage.{0,10}limit/i,
-    /rate.{0,10}limit/i,
-    /quota.{0,10}exceeded/i,
-    /too.{0,10}many.{0,10}requests/i,
-    /API.{0,10}limit/i,
-    /請求.{0,10}上限/,
-    /使用.{0,10}制限/,
-    /制限.{0,10}達成/
+  // Claude Code の固定メッセージをチェック（実際のメッセージ形式）
+  const claudeUsageLimitMessage = /Claude\s*usage\s*limit\s*reached\.\s*Your\s*limit\s*will\s*reset\s*at/;
+
+  if (claudeUsageLimitMessage.test(errorMessage)) {
+    return true;
+  }
+
+  // その他の一般的な使用制限パターン（フォールバック）
+  const generalLimitPatterns = [
+    /usage\s*limit/i,
+    /rate\s*limit/i,
+    /too\s*many\s*requests/i,
+    /429\s*too\s*many\s*requests/i
   ];
-  
-  return usageLimitPatterns.some(pattern => pattern.test(errorMessage));
+
+  // 除外パターン（誤検知を防ぐ）
+  const excludePatterns = [
+    /no\s*limit/i,
+    /unlimited/i,
+    /within\s*limit/i
+  ];
+
+  // 除外パターンにマッチする場合は false
+  if (excludePatterns.some(pattern => pattern.test(errorMessage))) {
+    return false;
+  }
+
+  // 一般的なパターンをチェック
+  const hasGeneralPattern = generalLimitPatterns.some(pattern => pattern.test(errorMessage));
+
+  if (hasGeneralPattern) {
+    console.log(`🚨 Usage limit detected in error message: ${errorMessage.substring(0, 200)}...`);
+  }
+
+  return hasGeneralPattern;
 };
 
 // Usage limit 状態を設定
 const setUsageLimit = async (errorMessage: string) => {
   const now = new Date();
-  const retryDelayMinutes = Math.min(30 + (usageLimitState.retryCount * 10), 120); // 30 分から最大 2 時間
-  
+  let nextRetryAt: Date;
+  let retryMessage: string;
+
+  // Claude Codeメッセージから時刻を抽出
+  const timeMatch = errorMessage.match(/reset at (\d{1,2})(am|pm) \(Asia\/Tokyo\)/i);
+
+  if (timeMatch) {
+    const hour = parseInt(timeMatch[1]);
+    const period = timeMatch[2].toLowerCase();
+
+    // 24時間形式に変換
+    let resetHour = hour;
+    if (period === 'pm' && hour !== 12) {
+      resetHour = hour + 12;
+    } else if (period === 'am' && hour === 12) {
+      resetHour = 0;
+    }
+
+    // 今日の指定時刻を設定
+    const resetTime = new Date();
+    resetTime.setHours(resetHour, 0, 0, 0);
+
+    // 既に過ぎている場合は明日に設定
+    if (resetTime <= now) {
+      resetTime.setDate(resetTime.getDate() + 1);
+    }
+
+    nextRetryAt = resetTime;
+    const hoursUntilReset = Math.ceil((nextRetryAt.getTime() - now.getTime()) / (1000 * 60 * 60));
+    retryMessage = `Claude Code usage limit reached. Retrying at ${timeMatch[1]}${timeMatch[2]} (Asia/Tokyo) - ${hoursUntilReset} hours.`;
+
+    console.log(`⏸️ Usage limit detected. Reset at ${timeMatch[1]}${timeMatch[2]} (Asia/Tokyo)`);
+  } else {
+    // フォールバック: 固定遅延時間
+    const retryDelayMinutes = Math.min(30 + (usageLimitState.retryCount * 10), 120);
+    nextRetryAt = new Date(now.getTime() + retryDelayMinutes * 60 * 1000);
+    retryMessage = `Claude Code usage limit reached. Retrying in ${retryDelayMinutes} minutes.`;
+
+    console.log(`⏸️ Usage limit detected. Pausing for ${retryDelayMinutes} minutes (retry #${usageLimitState.retryCount})`);
+  }
+
   usageLimitState = {
     isLimited: true,
     pausedAt: now,
-    nextRetryAt: new Date(now.getTime() + retryDelayMinutes * 60 * 1000),
+    nextRetryAt: nextRetryAt,
     retryCount: usageLimitState.retryCount + 1,
     lastErrorMessage: errorMessage
   };
-  
+
   await saveUsageLimitState();
-  
-  console.log(`⏸️ Usage limit detected. Pausing for ${retryDelayMinutes} minutes (retry #${usageLimitState.retryCount})`);
+
   console.log(`🔄 Next retry at: ${usageLimitState.nextRetryAt?.toLocaleString('ja-JP')}`);
-  
+
   // 進行中のタスクを paused 状態に変更
   taskQueue.forEach(task => {
     if (task.status === 'in_progress') {
@@ -590,12 +816,12 @@ const setUsageLimit = async (errorMessage: string) => {
       task.lastAttemptAt = now;
     }
   });
-  
+
   await saveTasks();
-  
+
   // クライアントに通知
   io.emit('usage-limit-reached', {
-    message: `Claude Code usage limit reached. Retrying in ${retryDelayMinutes} minutes.`,
+    message: retryMessage,
     nextRetryAt: usageLimitState.nextRetryAt,
     retryCount: usageLimitState.retryCount,
     timestamp: now
@@ -607,40 +833,40 @@ const checkUsageLimitResolution = async (): Promise<boolean> => {
   if (!usageLimitState.isLimited || !usageLimitState.nextRetryAt) {
     return true;
   }
-  
+
   const now = new Date();
   if (now >= usageLimitState.nextRetryAt) {
     console.log(`🔄 Attempting to resume after usage limit (retry #${usageLimitState.retryCount})`);
-    
+
     // リセット
     usageLimitState.isLimited = false;
     usageLimitState.pausedAt = undefined;
     usageLimitState.nextRetryAt = undefined;
     // retryCount は保持して段階的に遅延時間を調整
-    
+
     await saveUsageLimitState();
-    
+
     // paused 状態のタスクを pending に戻す
     const pausedTasks = taskQueue.filter(t => t.status === 'paused');
     pausedTasks.forEach(task => {
       task.status = 'pending';
       task.pausedReason = undefined;
     });
-    
+
     await saveTasks();
-    
+
     console.log(`✅ Usage limit resolved. Resumed ${pausedTasks.length} paused tasks.`);
-    
+
     // クライアントに通知
     io.emit('usage-limit-resolved', {
       message: 'Claude Code usage limit resolved. Resuming task processing.',
       resumedTasks: pausedTasks.length,
       timestamp: now
     });
-    
+
     return true;
   }
-  
+
   return false;
 };
 
@@ -654,41 +880,41 @@ const sendToAgent = async (agentName: string, message: string): Promise<boolean>
       return false;
     }
   }
-  
+
   try {
     const scriptPath = path.resolve(__dirname, '../../agent-send.sh');
     const command = `bash "${scriptPath}" "${agentName}" "${message}"`;
-    
+
     const { stdout, stderr } = await execAsync(command);
     console.log(`✅ Sent to ${agentName}:`, message);
     console.log('Output:', stdout);
-    
+
     if (stderr) {
       console.warn('Warning:', stderr);
-      
+
       // Usage limit 検知
       if (detectUsageLimit(stderr)) {
         await setUsageLimit(stderr);
         return false;
       }
     }
-    
+
     // 成功した場合、retryCount をリセット
     if (usageLimitState.retryCount > 0) {
       usageLimitState.retryCount = 0;
       await saveUsageLimitState();
     }
-    
+
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`❌ Failed to send to ${agentName}:`, errorMessage);
-    
+
     // Usage limit 検知
     if (detectUsageLimit(errorMessage)) {
       await setUsageLimit(errorMessage);
     }
-    
+
     return false;
   }
 };
@@ -696,7 +922,7 @@ const sendToAgent = async (agentName: string, message: string): Promise<boolean>
 // workspace ディレクトリを作成
 const createWorkspaceDir = async (projectName: string): Promise<void> => {
   try {
-    const workspaceDir = `/workspace/projects/${projectName}`;
+    const workspaceDir = `workspace/${projectName}`;
     await execAsync(`mkdir -p "${workspaceDir}"`);
     console.log(`📁 Created workspace directory: ${workspaceDir}`);
   } catch (error) {
@@ -711,10 +937,10 @@ const assignTaskToPresident = async (task: Task) => {
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
     .substring(0, 30);
-  
+
   // workspace ディレクトリを作成
   await createWorkspaceDir(projectName);
-  
+
   const presidentMessage = `あなたは president です。
 
 新しいタスクが来ました：
@@ -726,32 +952,32 @@ const assignTaskToPresident = async (task: Task) => {
 【推奨プロジェクト名】${projectName}
 
 このタスクをチームに指示して、効率的に実行してください。
-作業は /workspace/projects/${projectName} で行うよう指示してください。
+作業は workspace/${projectName} で行うよう指示してください。
 CLAUDE.md と instructions/president.md の内容に従って進めてください。`;
 
   const success = await sendToAgent('president', presidentMessage);
-  
+
   if (success) {
     const updatedTask = await db.updateTask(task.id, {
       status: 'in_progress',
       assignedTo: 'president',
       projectName: projectName
     });
-    
+
     if (updatedTask) {
       // メモリキャッシュも更新
       const index = taskQueue.findIndex(t => t.id === task.id);
       if (index !== -1) {
         taskQueue[index] = updatedTask;
       }
-      
+
       // エージェント状態の変更をブロードキャスト
       broadcastAgentStatusUpdate('president', 'working', task.title);
     }
-    
+
     console.log(`📋 Task ${task.id} assigned to president with project: ${projectName}`);
   }
-  
+
   return success;
 };
 
@@ -765,19 +991,19 @@ const processTaskQueue = async () => {
       return;
     }
   }
-  
+
   const pendingTasks = taskQueue.filter(t => t.status === 'pending');
-  
+
   if (pendingTasks.length > 0) {
     const nextTask = pendingTasks[0];
     console.log(`🚀 Processing task: ${nextTask.title}`);
-    
+
     const success = await assignTaskToPresident(nextTask);
-    
+
     if (success) {
       // クライアントに更新を通知
       io.emit('task-assigned', nextTask);
-      
+
       const taskCounts = await db.getTaskCounts();
       io.emit('task-queue-updated', {
         pending: taskCounts.pending,
@@ -790,13 +1016,13 @@ const processTaskQueue = async () => {
   }
 };
 
-// タスク完了時の軽量クリーンアップ（tmux-continuum 対応）
-const performTaskCompletionCleanup = async (): Promise<void> => {
+// プロジェクト完了時の専用クリーンアップ（/clear 送信）
+const performProjectCompletionCleanup = async (): Promise<void> => {
   try {
-    console.log('🧹 Performing lightweight task completion cleanup...');
-    
-    // 1. Claude Code プロセスを各 tmux セッション/ペインで終了
-    console.log('🔄 Stopping Claude Code processes...');
+    console.log('🎉 Performing project completion cleanup...');
+
+    // Claude Code に /clear を送信してセッションをクリア
+    console.log('🧹 Clearing Claude Code sessions...');
     const agents = [
       { name: 'president', target: 'president' },
       { name: 'boss1', target: 'multiagent:0.0' },
@@ -804,39 +1030,96 @@ const performTaskCompletionCleanup = async (): Promise<void> => {
       { name: 'worker2', target: 'multiagent:0.2' },
       { name: 'worker3', target: 'multiagent:0.3' }
     ];
-    
+
     for (const agent of agents) {
       try {
-        // Ctrl+C を送信して Claude Code プロセスを終了
-        await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
-        await new Promise(resolve => setTimeout(resolve, 500)); // 少し待機
-        
-        console.log(`✅ Claude Code stopped in ${agent.name} (${agent.target})`);
+        // /clear を送信してセッションをクリア
+        await execAsync(`tmux send-keys -t "${agent.target}" '/clear' C-m`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // クリア処理を待機
+
+        console.log(`✅ Claude Code session cleared in ${agent.name} (${agent.target})`);
       } catch (error) {
-        console.warn(`Warning stopping Claude Code in ${agent.name}:`, error instanceof Error ? error.message : 'Unknown error');
+        console.warn(`Warning clearing Claude Code in ${agent.name}:`, error instanceof Error ? error.message : 'Unknown error');
       }
     }
-    
+
+    // tmp ディレクトリをクリーンアップ
+    console.log('🗑️ Cleaning tmp directory...');
+    await execAsync('rm -rf ./tmp/*').catch(error => {
+      console.warn('Warning during tmp cleanup:', error.message);
+    });
+
+    console.log('✅ Project completion cleanup finished - Claude Code sessions cleared');
+
+    // クライアントに通知
+    io.emit('project-completion-cleanup', {
+      message: 'Project completed successfully. Claude Code sessions cleared and ready for next project.',
+      timestamp: new Date()
+    });
+
+  } catch (error) {
+    console.error('❌ Error during project completion cleanup:', error);
+
+    // エラーをクライアントに通知
+    io.emit('system-error', {
+      message: 'Failed to perform project completion cleanup',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date()
+    });
+  }
+};
+
+// タスク完了時の軽量クリーンアップ（tmux-continuum 対応）
+const performTaskCompletionCleanup = async (): Promise<void> => {
+  try {
+    console.log('🧹 Performing lightweight task completion cleanup...');
+
+    // 1. Claude Code に /clear を送信してからプロセスを終了
+    console.log('🧹 Clearing Claude Code sessions and stopping processes...');
+    const agents = [
+      { name: 'president', target: 'president' },
+      { name: 'boss1', target: 'multiagent:0.0' },
+      { name: 'worker1', target: 'multiagent:0.1' },
+      { name: 'worker2', target: 'multiagent:0.2' },
+      { name: 'worker3', target: 'multiagent:0.3' }
+    ];
+
+    for (const agent of agents) {
+      try {
+        // まず /clear を送信してセッションをクリア
+        await execAsync(`tmux send-keys -t "${agent.target}" '/clear' C-m`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // クリア処理を待機
+        
+        // その後 Ctrl+C を送信して Claude Code プロセスを終了
+        await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
+        await new Promise(resolve => setTimeout(resolve, 500)); // 少し待機
+
+        console.log(`✅ Claude Code cleared and stopped in ${agent.name} (${agent.target})`);
+      } catch (error) {
+        console.warn(`Warning clearing/stopping Claude Code in ${agent.name}:`, error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+
     // 2. tmp ディレクトリをクリーンアップ
     console.log('🗑️ Cleaning tmp directory...');
     await execAsync('rm -rf ./tmp/*').catch(error => {
       console.warn('Warning during tmp cleanup:', error.message);
     });
-    
+
     // 3. 次回起動用のメッセージ（セットアップは不要）
     console.log('📝 Ready for next task. Use ./launch-agents.sh to restart Claude Code.');
-    
+
     console.log('✅ Lightweight cleanup finished - tmux sessions preserved');
-    
+
     // クライアントに通知
     io.emit('system-reset', {
       message: 'Claude Code processes stopped. tmux sessions preserved. Ready for next task.',
       timestamp: new Date()
     });
-    
+
   } catch (error) {
     console.error('❌ Error during task completion cleanup:', error);
-    
+
     // エラーをクライアントに通知
     io.emit('system-error', {
       message: 'Failed to reset environment',
@@ -853,10 +1136,10 @@ app.get('/api/terminal/:target', async (req, res) => {
     res.header('Access-Control-Allow-Origin', FRONTEND_URL);
     res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type');
-    
+
     const target = req.params.target;
     console.log(`📺 Fetching terminal output for: ${target}`);
-    
+
     // tmux セッション・ペイン名をマッピング
     let tmuxTarget = target;
     switch (target) {
@@ -878,12 +1161,12 @@ app.get('/api/terminal/:target', async (req, res) => {
       default:
         tmuxTarget = target;
     }
-    
+
     console.log(`🎯 Mapped ${target} to tmux target: ${tmuxTarget}`);
-    
+
     const { stdout } = await execAsync(`tmux capture-pane -t "${tmuxTarget}" -p`);
     console.log(`✅ Terminal output length: ${stdout.length} chars for ${target}`);
-    
+
     res.type('text/plain').send(stdout);
   } catch (error) {
     console.error(`❌ Failed to capture terminal ${req.params.target}:`, error);
@@ -969,7 +1252,7 @@ io.on('connection', async (socket) => {
   // 新しいタスク要求の処理
   socket.on('request-task', async (taskData) => {
     console.log('📥 Received task request:', taskData);
-    
+
     try {
       // データベースにタスクを作成
       const newTask = await db.createTask({
@@ -977,18 +1260,18 @@ io.on('connection', async (socket) => {
         description: taskData.description,
         status: 'pending'
       });
-      
+
       // メモリキャッシュを更新
       await refreshTaskCache();
-      
+
       // クライアントに通知
       io.emit('task-queued', newTask);
-      
+
       console.log(`📋 Task queued: ${newTask.title} (ID: ${newTask.id})`);
-      
+
       // タスクキューを処理
       setTimeout(() => processTaskQueue(), 1000);
-      
+
     } catch (error) {
       console.error('❌ Failed to create task:', error);
       socket.emit('task-error', {
@@ -1002,26 +1285,26 @@ io.on('connection', async (socket) => {
   socket.on('task-completed', async (taskId: string) => {
     try {
       // データベースでタスクを更新
-      const updatedTask = await db.updateTask(taskId, { 
+      const updatedTask = await db.updateTask(taskId, {
         status: 'completed'
       });
-      
+
       if (updatedTask) {
         // メモリキャッシュを更新
         await refreshTaskCache();
-        
+
         // エージェント状態の変更をブロードキャスト
         if (updatedTask.assignedTo) {
           broadcastAgentStatusUpdate(updatedTask.assignedTo, 'idle');
         }
-        
+
         io.emit('task-completed', updatedTask);
         console.log(`✅ Task completed: ${updatedTask.title}`);
-        
+
         // タスク完了時のクリーンアップとセットアップ
         console.log('🧹 Starting cleanup and reset process...');
         await performTaskCompletionCleanup();
-        
+
         // 次のタスクを処理
         setTimeout(() => processTaskQueue(), 5000);
       }
@@ -1037,21 +1320,21 @@ io.on('connection', async (socket) => {
   // 手動タスク完了エンドポイント（デバッグ用）
   socket.on('mark-task-completed', async (taskId: string) => {
     try {
-      const updatedTask = await db.updateTask(taskId, { 
+      const updatedTask = await db.updateTask(taskId, {
         status: 'completed'
       });
-      
+
       if (updatedTask) {
         await refreshTaskCache();
-        
+
         // エージェント状態の変更をブロードキャスト
         if (updatedTask.assignedTo) {
           broadcastAgentStatusUpdate(updatedTask.assignedTo, 'idle');
         }
-        
+
         io.emit('task-completed', updatedTask);
         console.log(`✅ Task manually marked completed: ${updatedTask.title}`);
-        
+
         // クリーンアップ実行
         await performTaskCompletionCleanup();
         setTimeout(() => processTaskQueue(), 5000);
@@ -1065,18 +1348,18 @@ io.on('connection', async (socket) => {
   socket.on('mark-task-failed', async (data: { taskId: string; reason: string }) => {
     try {
       const updatedTask = await db.markTaskAsFailed(data.taskId, data.reason);
-      
+
       if (updatedTask) {
         await refreshTaskCache();
-        
+
         // エージェント状態の変更をブロードキャスト
         if (updatedTask.assignedTo) {
           broadcastAgentStatusUpdate(updatedTask.assignedTo, 'idle');
         }
-        
+
         io.emit('task-failed', updatedTask);
         console.log(`❌ Task marked as failed: ${updatedTask.title} - ${data.reason}`);
-        
+
         // 失敗時のクリーンナップ
         await performTaskCompletionCleanup();
       }
@@ -1093,18 +1376,18 @@ io.on('connection', async (socket) => {
   socket.on('retry-task', async (taskId: string) => {
     try {
       const updatedTask = await db.retryTask(taskId);
-      
+
       if (updatedTask) {
         await refreshTaskCache();
-        
+
         // エージェント状態をリセット（再実行準備）
         if (updatedTask.assignedTo) {
           broadcastAgentStatusUpdate(updatedTask.assignedTo, 'idle');
         }
-        
+
         io.emit('task-retried', updatedTask);
         console.log(`🔄 Task retried: ${updatedTask.title} (attempt ${updatedTask.retryCount})`);
-        
+
         // タスクキューを処理
         setTimeout(() => processTaskQueue(), 1000);
       }
@@ -1121,12 +1404,12 @@ io.on('connection', async (socket) => {
   socket.on('restart-task-as-new', async (taskId: string) => {
     try {
       const newTask = await db.cloneTaskAsNew(taskId);
-      
+
       if (newTask) {
         await refreshTaskCache();
         io.emit('task-queued', newTask);
         console.log(`🆕 Task restarted as new: ${newTask.title}`);
-        
+
         // タスクキューを処理
         setTimeout(() => processTaskQueue(), 1000);
       }
@@ -1142,32 +1425,32 @@ io.on('connection', async (socket) => {
   // 緊急停止機能
   socket.on('emergency-stop', async () => {
     console.log('🚨 Emergency stop requested');
-    
+
     try {
       // すべての進行中タスクを停止状態に
       const inProgressTasks = taskQueue.filter(t => t.status === 'in_progress');
       for (const task of inProgressTasks) {
         await db.updateTask(task.id, { status: 'pending' });
-        
+
         // エージェント状態をリセット
         if (task.assignedTo) {
           broadcastAgentStatusUpdate(task.assignedTo, 'idle');
         }
       }
-      
+
       // 全エージェントの状態をクリア
       agentStatusCache = {};
-      
+
       await refreshTaskCache();
       await performTaskCompletionCleanup();
-      
+
       io.emit('emergency-stop-completed', {
         message: 'Emergency stop completed. All tasks reset.',
         timestamp: new Date()
       });
-      
+
       console.log('✅ Emergency stop completed');
-      
+
     } catch (error) {
       console.error('❌ Error during emergency stop:', error);
       io.emit('system-error', {
@@ -1184,23 +1467,23 @@ io.on('connection', async (socket) => {
     if (taskIndex !== -1) {
       const task = taskQueue[taskIndex];
       console.log(`❌ Canceling task: ${task.title}`);
-      
+
       // エージェント状態をリセット
       if (task.assignedTo && task.status === 'in_progress') {
         broadcastAgentStatusUpdate(task.assignedTo, 'idle');
       }
-      
+
       // データベースから削除
       await db.deleteTask(task.id);
       // メモリキャッシュからも削除
       taskQueue.splice(taskIndex, 1);
-      
+
       io.emit('task-cancelled', {
         task,
         message: `Task "${task.title}" has been cancelled`,
         timestamp: new Date()
       });
-      
+
       // 統計を更新
       const taskCounts = await db.getTaskCounts();
       io.emit('task-queue-updated', {
@@ -1216,11 +1499,11 @@ io.on('connection', async (socket) => {
   // 手動復旧リクエスト
   socket.on('manual-recovery-request', async () => {
     console.log('🔧 Manual recovery requested by user');
-    
+
     try {
       const currentHealth = await performHealthCheck();
       const recoveryResult = await performAutoRecovery(currentHealth, true);
-      
+
       if (recoveryResult) {
         console.log('✅ Manual recovery completed successfully');
       } else {
@@ -1269,24 +1552,24 @@ setInterval(() => {
 // Graceful shutdown
 const gracefulShutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
-  
+
   try {
     // データベース接続を閉じる
     await db.disconnect();
     console.log('💾 Database disconnected');
-    
+
     // サーバーを閉じる
     server.close(() => {
       console.log('✅ Server closed');
       process.exit(0);
     });
-    
+
     // 5 秒でタイムアウト
     setTimeout(() => {
       console.log('⚠️ Force shutdown');
       process.exit(1);
     }, 5000);
-    
+
   } catch (error) {
     console.error('❌ Error during shutdown:', error);
     process.exit(1);
@@ -1302,7 +1585,7 @@ const startServer = async () => {
   try {
     // システム初期化
     await initializeSystem();
-    
+
     // 本番環境では静的ファイルを配信
     if (process.env.NODE_ENV === 'production') {
       const buildPath = path.resolve(__dirname, '../../dist');
@@ -1313,13 +1596,13 @@ const startServer = async () => {
         }
       });
     }
-    
+
     // サーバー起動
     server.listen(PORT, () => {
       console.log(`🚀 Server listening on *:${PORT}`);
       console.log(`📋 Task queue system ready with SQLite database`);
     });
-    
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
