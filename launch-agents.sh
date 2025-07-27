@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 🚀 AIエージェント一括起動スクリプト
+# 🚀 AI エージェント一括起動スクリプト
 # claude --dangerously-skip-permissions フラグ付きで全エージェントを起動
 
 set -e  # エラー時に停止
@@ -18,7 +18,7 @@ log_warning() {
     echo -e "\033[1;33m[WARNING]\033[0m $1"
 }
 
-echo "🤖 AIエージェント一括起動"
+echo "🤖 AI エージェント一括起動"
 echo "=========================="
 echo ""
 
@@ -27,12 +27,12 @@ check_sessions() {
     local all_exist=true
     
     if ! tmux has-session -t president 2>/dev/null; then
-        log_warning "presidentセッションが存在しません"
+        log_warning "president セッションが存在しません"
         all_exist=false
     fi
     
     if ! tmux has-session -t multiagent 2>/dev/null; then
-        log_warning "multiagentセッションが存在しません"
+        log_warning "multiagent セッションが存在しません"
         all_exist=false
     fi
     
@@ -65,24 +65,24 @@ main() {
     echo "  - worker1, 2, 3 (実行担当者)"
     echo ""
     
-    # 起動確認
-    read -p "全エージェントを起動しますか？ (y/N): " confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        echo "キャンセルしました"
-        exit 0
-    fi
+    # 起動確認をスキップ（自動的に実行）
+    # read -p "全エージェントを起動しますか？ (y/N): " confirm
+    # if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    #     echo "キャンセルしました"
+    #     exit 0
+    # fi
     
     echo ""
     log_info "起動を開始します..."
     echo ""
     
-    # PRESIDENT起動
+    # PRESIDENT 起動
     launch_agent "president" "PRESIDENT"
     
-    # boss1起動
+    # boss1 起動
     launch_agent "multiagent:0.0" "boss1"
     
-    # workers起動
+    # workers 起動
     launch_agent "multiagent:0.1" "worker1"
     launch_agent "multiagent:0.2" "worker2"
     launch_agent "multiagent:0.3" "worker3"
@@ -92,8 +92,11 @@ main() {
     echo ""
     echo "📋 次のステップ:"
     echo "  1. 各画面でブラウザ認証を完了してください"
-    echo "  2. PRESIDENTに指示を送信:"
-    echo "     「あなたはpresidentです。[プロジェクト内容]」"
+    echo "  2. PRESIDENT に指示を送信:"
+    echo "     「あなたは president です。[プロジェクト内容]」"
+    echo ""
+    echo "💡 PRESIDENT 自動再起動を有効にする:"
+    echo "  ./start-president-daemon.sh &     # バックグラウンドで監視開始"
     echo ""
     echo "💡 画面を確認:"
     echo "  tmux attach-session -t president    # 社長画面"

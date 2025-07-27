@@ -1,20 +1,135 @@
-# ログファイル
+# ======================================
+# Node.js & Package Managers
+# ======================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+*.tgz
+
+# ======================================
+# Build & Distribution
+# ======================================
+dist/
+build/
+.cache
+.parcel-cache
+
+# ======================================
+# Environment & Configuration
+# ======================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ======================================
+# Database & Data Storage
+# ======================================
+*.db
+*.sqlite
+*.sqlite3
+data/database.db
+
+# ======================================
+# Logs & Runtime Data
+# ======================================
 logs/
 *.log
-*.txt
+pids/
+*.pid
+*.seed
+*.pid.lock
 
-# 一時ファイル
-tmp/
-*.tmp
-*_done.txt
+# ======================================
+# Testing & Coverage
+# ======================================
+coverage/
+*.lcov
+.nyc_output
+.vscode-test
 
-# OS固有
+# ======================================
+# Development Tools Cache
+# ======================================
+.eslintcache
+*.tsbuildinfo
+
+# ======================================
+# System & Editor Files
+# ======================================
+# macOS
 .DS_Store
-Thumbs.db
 
-# エディタ
-*.swp
-*.swo
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
 *~
+
+# Editor directories and files
 .vscode/
-.idea/ 
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.node_repl_history
+
+# ======================================
+# Temporary & Cache Directories
+# ======================================
+tmp/
+temp/
+
+# ======================================
+# Project Specific
+# ======================================
+# Prisma generated files
+/src/generated/
+
+# Claude Code settings
+.claude/settings.local.json
+
+# Test and report files
+*-reports/
+*-report.html
+*-report.md
+lighthouse-reports/
+final-quality-report.md
+quality-report-template.md
+
+# Test HTML files
+test.html
+*test*.html
+simple-test.html
+
+# Test & validation scripts
+lighthouse-test.sh
+performance-test.sh
+html-validation.sh
+css-validation.sh
+accessibility-test.sh
+responsive-test.sh
+browser-compatibility-test.sh
+run-all-tests.sh
+
+# Build & optimization scripts
+image-optimization.sh
+minify-assets.sh
+cache-strategy.sh
+
+# Monitoring & report generation scripts
+monitor-workers.sh
+generate-final-report.sh
+project-status.sh
+
+# Experimental & personal scripts
+start-president-daemon.sh
+*-daemon.sh
