@@ -22,8 +22,13 @@ interface Agent {
   id: string;
   name: string;
   role: 'president' | 'manager' | 'worker';
-  status: 'idle' | 'working' | 'offline';
+  status: 'idle' | 'working' | 'offline' | 'error';
   currentTask?: string;
+  workingOnFile?: string;
+  executingCommand?: string;
+  lastActivity?: Date;
+  lastActivityType?: string;
+  lastActivityDescription?: string;
 }
 
 interface DashboardProps {
@@ -159,6 +164,7 @@ export const Dashboard = ({ terminalsOnly = false }: DashboardProps) => {
       case 'working': return 'bg-green-500';
       case 'idle': return 'bg-yellow-500';
       case 'offline': return 'bg-red-500';
+      case 'error': return 'bg-red-600 animate-pulse';
       default: return 'bg-gray-500';
     }
   };
@@ -411,7 +417,12 @@ export const Dashboard = ({ terminalsOnly = false }: DashboardProps) => {
                       <div className="text-white font-semibold">{agent.name}</div>
                       <div className="text-slate-400 text-xs capitalize">{agent.role}</div>
                     </div>
-                    <div className={`w-3 h-3 rounded-full ${getStatusColor(agent.status)} ${agent.status === 'working' ? 'animate-pulse' : ''}`}></div>
+                    <div className="relative">
+                      <div className={`w-3 h-3 rounded-full ${getStatusColor(agent.status)} ${agent.status === 'working' ? 'animate-pulse' : ''}`}></div>
+                      {agent.status === 'working' && (
+                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-ping"></div>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="space-y-2">
@@ -419,18 +430,61 @@ export const Dashboard = ({ terminalsOnly = false }: DashboardProps) => {
                       <span className="text-xs text-slate-500">Status</span>
                       <span className={`text-xs font-medium capitalize ${
                         agent.status === 'working' ? 'text-emerald-400' : 
-                        agent.status === 'idle' ? 'text-amber-400' : 'text-red-400'
+                        agent.status === 'idle' ? 'text-amber-400' : 
+                        agent.status === 'error' ? 'text-red-500 font-bold' : 'text-red-400'
                       }`}>
                         {agent.status}
                       </span>
                     </div>
                     
-                    {agent.currentTask && (
-                      <div className="pt-2 border-t border-slate-700/50">
-                        <div className="text-xs text-slate-500 mb-1">Current Task</div>
-                        <div className="text-xs text-blue-400 leading-relaxed">
-                          {agent.currentTask}
-                        </div>
+                    {(agent.currentTask || agent.workingOnFile || agent.executingCommand) && (
+                      <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                        {agent.currentTask && (
+                          <div>
+                            <div className="text-xs text-slate-500 mb-1">Current Task</div>
+                            <div className="text-xs text-blue-400 leading-relaxed">
+                              {agent.currentTask}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {agent.workingOnFile && (
+                          <div>
+                            <div className="text-xs text-slate-500 mb-1">Working On</div>
+                            <div className="text-xs text-emerald-400 leading-relaxed font-mono">
+                              📄 {agent.workingOnFile}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {agent.executingCommand && (
+                          <div>
+                            <div className="text-xs text-slate-500 mb-1">Executing</div>
+                            <div className="text-xs text-amber-400 leading-relaxed font-mono">
+                              ⚡ {agent.executingCommand}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {agent.lastActivityDescription && (
+                          <div>
+                            <div className="text-xs text-slate-500 mb-1">Activity</div>
+                            <div className="text-xs text-purple-400 leading-relaxed">
+                              {agent.lastActivityType && (
+                                <span className="inline-block w-2 h-2 bg-purple-400 rounded-full mr-1"></span>
+                              )}
+                              {agent.lastActivityDescription}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {agent.lastActivity && (
+                          <div className="pt-1">
+                            <div className="text-xs text-slate-600">
+                              Last: {new Date(agent.lastActivity).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

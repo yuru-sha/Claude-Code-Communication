@@ -2,14 +2,45 @@
 export type AgentRole = 'president' | 'manager' | 'worker' | 'specialist';
 
 // エージェント状態
-export type AgentStatus = 'idle' | 'working' | 'offline';
+export type AgentStatusType = 'idle' | 'working' | 'offline' | 'error';
 
-// エージェント情報
+// エージェント活動タイプ
+export type ActivityType = 'coding' | 'file_operation' | 'command_execution' | 'thinking' | 'idle';
+
+// 拡張されたエージェント状態インターフェース
+export interface AgentStatus {
+  id: string;
+  name: string;
+  status: AgentStatusType;
+  currentActivity?: string;
+  lastActivity: Date;
+  terminalOutput?: string;
+  workingOnFile?: string;
+  executingCommand?: string;
+}
+
+// エージェント活動パターン
+export interface AgentActivityPattern {
+  pattern: RegExp;
+  activityType: ActivityType;
+  priority: number;
+}
+
+// 活動情報
+export interface ActivityInfo {
+  activityType: ActivityType;
+  description: string;
+  timestamp: Date;
+  fileName?: string;
+  command?: string;
+}
+
+// エージェント情報（後方互換性のため保持）
 export interface Agent {
   id: string;
   name: string;
   role: string;
-  status: AgentStatus;
+  status: AgentStatusType;
   currentTask?: string;
   tasksCompleted?: number;
   efficiency?: number;
@@ -88,14 +119,16 @@ export interface ServerToClientEvents {
   'task-queued': (task: Task) => void;
   'task-assigned': (task: Task, agent: Agent) => void;
   'task-completed': (task: Task) => void;
-  'agent-status-updated': (agent: Agent) => void;
+  'agent-status-updated': (agentStatus: AgentStatus) => void;
+  'agent-activity-detected': (activityInfo: ActivityInfo & { agentId: string }) => void;
+  'agent-detailed-status': (detailedStatus: AgentStatus & { activityHistory?: ActivityInfo[] }) => void;
   'terminal-output': (agentId: string, output: string) => void;
   'project-updated': (project: Project) => void;
 }
 
 export interface ClientToServerEvents {
   'request-task': (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'status'>) => void;
-  'update-agent-status': (agentId: string, status: AgentStatus) => void;
+  'update-agent-status': (agentId: string, status: AgentStatusType) => void;
   'send-terminal-input': (agentId: string, input: string) => void;
   'request-project-status': () => void;
 }
@@ -131,6 +164,18 @@ export const AGENT_SPECIALTIES = {
   design: ['UI/UX', 'Figma', 'Prototyping'],
   qa: ['Testing', 'Automation', 'Quality Assurance']
 } as const;
+
+// 活動検知設定定数
+export const ACTIVITY_DETECTION_CONFIG = {
+  ACTIVE_CHECK_INTERVAL: 10000,    // 10秒（アクティブ時）
+  IDLE_CHECK_INTERVAL: 30000,      // 30秒（アイドル時）
+  IDLE_TIMEOUT: 300000,            // 5分（アイドル判定）
+  OUTPUT_BUFFER_SIZE: 200,         // 最新200行を監視
+  ACTIVITY_DEBOUNCE: 2000          // 2秒のデバウンス
+} as const;
+
+// Note: Activity patterns are now managed by ActivityPatternService
+// See src/backend/services/activityPatterns.ts for comprehensive pattern definitions
 
 // フォーム関連
 export interface TaskRequest {

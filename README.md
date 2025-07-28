@@ -2,6 +2,8 @@
 
 複数の AI が協力して働く、まるで会社のような開発システム + リアルタイム監視ダッシュボード
 
+![Dashboard](assets/screenshots/dashboard.jpg "Dashboard")
+
 ## 📌 これは何？
 
 **3 行で説明すると：**
