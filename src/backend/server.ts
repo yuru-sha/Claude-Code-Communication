@@ -7,6 +7,9 @@ import { promisify } from 'util';
 import fs from 'fs/promises';
 import archiver from 'archiver';
 import { db, Task, UsageLimitState } from './database';
+import { AgentStatus, AgentStatusType, ACTIVITY_DETECTION_CONFIG, ActivityInfo } from '../types';
+import { TerminalOutputMonitor } from './services/terminalOutputMonitor';
+import { ActivityAnalyzer } from './services/activityAnalyzer';
 
 const execAsync = promisify(exec);
 
@@ -44,6 +47,55 @@ const loadUsageLimitState = async (): Promise<void> => {
     }
   } catch (error) {
     console.error('❌ Failed to load usage limit state:', error);
+  }
+};
+
+// Activity monitoring instances
+const terminalMonitor = new TerminalOutputMonitor();
+const activityAnalyzer = new ActivityAnalyzer();
+
+// Import the real-time monitoring service
+import { AgentActivityMonitoringService } from './services/agentActivityMonitoringService';
+
+// Real-time monitoring service instance
+let agentActivityMonitoringService: AgentActivityMonitoringService | null = null;
+
+// Adaptive check intervals based on agent activity
+let currentCheckInterval: number = ACTIVITY_DETECTION_CONFIG.IDLE_CHECK_INTERVAL;
+let healthCheckIntervalId: NodeJS.Timeout | null = null;
+
+// Local SystemHealth interface (to avoid import conflicts)
+interface SystemHealth {
+  tmuxSessions: {
+    president: boolean;
+    multiagent: boolean;
+  };
+  claudeAgents: {
+    president: boolean;
+    boss1: boolean;
+    worker1: boolean;
+    worker2: boolean;
+    worker3: boolean;
+  };
+  overallHealth: 'healthy' | 'degraded' | 'critical';
+  timestamp: Date;
+}
+
+// Update check interval based on agent activity
+const updateCheckInterval = (hasActiveAgents: boolean): void => {
+  const newInterval = hasActiveAgents 
+    ? ACTIVITY_DETECTION_CONFIG.ACTIVE_CHECK_INTERVAL 
+    : ACTIVITY_DETECTION_CONFIG.IDLE_CHECK_INTERVAL;
+  
+  if (newInterval !== currentCheckInterval) {
+    currentCheckInterval = newInterval;
+    console.log(`🔄 Adjusted health check interval to ${newInterval}ms (${hasActiveAgents ? 'active' : 'idle'} mode)`);
+    
+    // Restart the health check interval with new timing
+    if (healthCheckIntervalId) {
+      clearInterval(healthCheckIntervalId);
+      startHealthCheckInterval();
+    }
   }
 };
 
@@ -117,11 +169,11 @@ let taskCompletionPatterns = [
   /プロジェクト正式完了を宣言します[。！]/,
   /プロジェクト完全成功を正式に宣言[。！]/,
   /プロジェクトが正常に完了しました[。！]/,
-  
+
   // フォールバック用の一般的なパターン
   /(?:タスク|プロジェクト|作業|開発)(?:が|を)?(?:完全に|すべて)?(?:完了|終了|完成)(?:いたし|し) ました[。！]/i,
   /(?:すべて|全て)(?:の)?(?:作業|実装|開発|機能)(?:が|を)?(?:完了|終了|完成)(?:いたし|し) ました[。！]/i,
-  
+
   // 英語の完了パターン
   /(?:task|project|work|development)(?:\s+has\s+been|\s+is)?\s+(?:successfully\s+)?(?:completed|finished|done)[.!]/i,
   /(?:all|everything)(?:\s+has\s+been|\s+is)?\s+(?:successfully\s+)?(?:completed|finished|done)[.!]/i
@@ -239,58 +291,285 @@ const checkClaudeAgents = async (): Promise<typeof systemHealthStatus.claudeAgen
   return agents;
 };
 
-// エージェント状態のメモリトラッキング
-let agentStatusCache: Record<string, { status: 'idle' | 'working' | 'offline', currentTask?: string, lastUpdate: Date }> = {};
+// エージェント状態のメモリトラッキング（拡張版）
+let agentStatusCache: Record<string, AgentStatus> = {};
 
-// エージェント状態の変更検知とブロードキャスト
-const broadcastAgentStatusUpdate = (agentName: string, newStatus: 'idle' | 'working' | 'offline', currentTask?: string) => {
-  // 既存の状態と比較
-  const cached = agentStatusCache[agentName];
-  const hasChanged = !cached ||
-    cached.status !== newStatus ||
-    cached.currentTask !== currentTask;
+// デバウンス用のタイマー管理
+let debounceTimers: Record<string, NodeJS.Timeout> = {};
 
-  if (!hasChanged) {
+// エージェント状態の変更検知とブロードキャスト（拡張版）
+const broadcastAgentStatusUpdate = (agentName: string, newStatus: AgentStatus | 'idle' | 'working' | 'offline', currentTask?: string) => {
+  // 後方互換性のため、古い形式の呼び出しを新しい形式に変換
+  let agentStatus: AgentStatus;
+  
+  if (typeof newStatus === 'string') {
+    // 古い形式の呼び出し（後方互換性）
+    agentStatus = {
+      id: agentName,
+      name: agentName.charAt(0).toUpperCase() + agentName.slice(1),
+      status: newStatus as AgentStatusType,
+      currentActivity: currentTask,
+      lastActivity: new Date()
+    };
+  } else {
+    // 新しい形式の呼び出し
+    agentStatus = newStatus;
+  }
+
+  // 状態変更の検証
+  if (!shouldUpdateStatus(agentName, agentStatus)) {
     return; // 変更がない場合はブロードキャストしない
   }
 
-  // キャッシュを更新
-  agentStatusCache[agentName] = {
-    status: newStatus,
-    currentTask: currentTask,
-    lastUpdate: new Date()
-  };
+  // デバウンス処理
+  if (debounceTimers[agentName]) {
+    clearTimeout(debounceTimers[agentName]);
+  }
 
-  const agentUpdate = {
-    id: agentName,
-    name: agentName.charAt(0).toUpperCase() + agentName.slice(1),
-    status: newStatus,
-    currentTask: currentTask,
-    timestamp: new Date()
-  };
+  debounceTimers[agentName] = setTimeout(() => {
+    // キャッシュを更新
+    agentStatusCache[agentName] = { ...agentStatus };
 
-  console.log(`📡 Broadcasting agent status update: ${agentName} -> ${newStatus}${currentTask ? ` (task: ${currentTask})` : ''}`);
-  io.emit('agent-status-updated', agentUpdate);
+    // 活動説明をフォーマット
+    const formattedStatus = {
+      ...agentStatus,
+      currentActivity: formatActivityDescription(agentStatus)
+    };
+
+    console.log(`📡 Broadcasting agent status update: ${agentName} -> ${agentStatus.status}${formattedStatus.currentActivity ? ` (${formattedStatus.currentActivity})` : ''}`);
+    
+    // Enhanced agent-status-updated event with activity details
+    io.emit('agent-status-updated', formattedStatus);
+
+    // Emit detailed activity information if available
+    if (agentStatus.currentActivity || agentStatus.workingOnFile || agentStatus.executingCommand) {
+      const activityInfo: ActivityInfo & { agentId: string } = {
+        agentId: agentName,
+        activityType: determineActivityTypeFromStatus(agentStatus),
+        description: agentStatus.currentActivity || formatActivityDescription(agentStatus),
+        timestamp: new Date(),
+        fileName: agentStatus.workingOnFile,
+        command: agentStatus.executingCommand
+      };
+      
+      console.log(`📊 Broadcasting detailed activity: ${agentName} -> ${activityInfo.activityType}`);
+      io.emit('agent-activity-detected', activityInfo);
+    }
+
+    // Emit comprehensive detailed status for advanced UI components
+    const detailedStatus = {
+      ...formattedStatus,
+      activityHistory: getRecentActivityHistory(agentName)
+    };
+    
+    io.emit('agent-detailed-status', detailedStatus);
+
+    // デバウンスタイマーをクリア
+    delete debounceTimers[agentName];
+  }, ACTIVITY_DETECTION_CONFIG.ACTIVITY_DEBOUNCE);
 };
 
-// システムヘルスチェックを実行
+// 状態変更の検証ロジック
+const shouldUpdateStatus = (agentName: string, newStatus: AgentStatus): boolean => {
+  const cached = agentStatusCache[agentName];
+  
+  if (!cached) {
+    return true; // 初回の状態設定
+  }
+
+  // 重要な変更をチェック
+  const hasStatusChange = cached.status !== newStatus.status;
+  const hasActivityChange = cached.currentActivity !== newStatus.currentActivity;
+  const hasFileChange = cached.workingOnFile !== newStatus.workingOnFile;
+  const hasCommandChange = cached.executingCommand !== newStatus.executingCommand;
+  
+  // 最後の更新から十分な時間が経過しているかチェック
+  const timeSinceLastUpdate = Date.now() - cached.lastActivity.getTime();
+  const hasSignificantTimeGap = timeSinceLastUpdate > ACTIVITY_DETECTION_CONFIG.ACTIVITY_DEBOUNCE;
+
+  return hasStatusChange || hasActivityChange || hasFileChange || hasCommandChange || hasSignificantTimeGap;
+};
+
+// 活動説明のフォーマット
+const formatActivityDescription = (agentStatus: AgentStatus): string => {
+  if (!agentStatus.currentActivity && !agentStatus.workingOnFile && !agentStatus.executingCommand) {
+    return '';
+  }
+
+  let description = '';
+
+  // 実行中のコマンドがある場合
+  if (agentStatus.executingCommand) {
+    description = `Executing: ${agentStatus.executingCommand}`;
+  }
+  // 作業中のファイルがある場合
+  else if (agentStatus.workingOnFile) {
+    description = `Working on: ${agentStatus.workingOnFile}`;
+  }
+  // 一般的な活動説明がある場合
+  else if (agentStatus.currentActivity) {
+    description = agentStatus.currentActivity;
+  }
+
+  // 説明が長すぎる場合は切り詰める
+  const MAX_DESCRIPTION_LENGTH = 100;
+  if (description.length > MAX_DESCRIPTION_LENGTH) {
+    description = description.substring(0, MAX_DESCRIPTION_LENGTH - 3) + '...';
+  }
+
+  return description;
+};
+
+// エージェント状態から活動タイプを判定
+const determineActivityTypeFromStatus = (agentStatus: AgentStatus): ActivityType => {
+  if (agentStatus.executingCommand) {
+    return 'command_execution';
+  }
+  if (agentStatus.workingOnFile) {
+    return 'file_operation';
+  }
+  if (agentStatus.currentActivity) {
+    // 活動内容から推測
+    const activity = agentStatus.currentActivity.toLowerCase();
+    if (activity.includes('code') || activity.includes('implement') || activity.includes('write')) {
+      return 'coding';
+    }
+    if (activity.includes('file') || activity.includes('create') || activity.includes('edit')) {
+      return 'file_operation';
+    }
+    if (activity.includes('command') || activity.includes('execute') || activity.includes('run')) {
+      return 'command_execution';
+    }
+    if (activity.includes('think') || activity.includes('analyz') || activity.includes('review')) {
+      return 'thinking';
+    }
+  }
+  return agentStatus.status === 'working' ? 'thinking' : 'idle';
+};
+
+// エージェントの最近の活動履歴を取得（メモリ内キャッシュから）
+const activityHistoryCache: Record<string, ActivityInfo[]> = {};
+const MAX_ACTIVITY_HISTORY = 10;
+
+const getRecentActivityHistory = (agentName: string): ActivityInfo[] => {
+  return activityHistoryCache[agentName] || [];
+};
+
+// 活動履歴を更新
+const updateActivityHistory = (agentName: string, activityInfo: ActivityInfo): void => {
+  if (!activityHistoryCache[agentName]) {
+    activityHistoryCache[agentName] = [];
+  }
+  
+  // 新しい活動を先頭に追加
+  activityHistoryCache[agentName].unshift(activityInfo);
+  
+  // 履歴の上限を維持
+  if (activityHistoryCache[agentName].length > MAX_ACTIVITY_HISTORY) {
+    activityHistoryCache[agentName] = activityHistoryCache[agentName].slice(0, MAX_ACTIVITY_HISTORY);
+  }
+};
+
+// Enhanced system health check with activity monitoring
 const performHealthCheck = async (): Promise<SystemHealth> => {
   const tmuxSessions = await checkTmuxSessions();
   const claudeAgents = await checkClaudeAgents();
 
-  // 前回の状態と比較してエージェント状態の変更を検知
-  const previousClaudeAgents = systemHealthStatus.claudeAgents || {};
-
-  // 各エージェントの状態変更を個別に通知
-  Object.keys(claudeAgents).forEach(agentName => {
-    const currentStatus = claudeAgents[agentName as keyof typeof claudeAgents];
-    const previousStatus = previousClaudeAgents[agentName as keyof typeof previousClaudeAgents];
-
-    if (currentStatus !== previousStatus) {
-      const status = currentStatus ? 'idle' : 'offline';
-      broadcastAgentStatusUpdate(agentName, status);
+  // Monitor agent activity using terminal output
+  let activityResults: any[] = [];
+  let hasActiveAgents = false;
+  
+  try {
+    activityResults = await terminalMonitor.monitorAllAgents();
+    
+    // Process activity results and update agent statuses
+    for (const result of activityResults) {
+      const agentName = result.agentName;
+      const isOnline = claudeAgents[agentName as keyof typeof claudeAgents];
+      
+      if (isOnline) {
+        // Determine agent status based on activity
+        let agentStatus: AgentStatusType = 'idle';
+        let currentActivity = '';
+        let workingOnFile: string | undefined;
+        let executingCommand: string | undefined;
+        
+        if (result.hasNewActivity && result.activityInfo) {
+          // Agent has new activity
+          const activityType = result.activityInfo.activityType;
+          
+          if (activityType === 'coding' || activityType === 'file_operation' || 
+              activityType === 'command_execution' || activityType === 'thinking') {
+            agentStatus = 'working';
+            hasActiveAgents = true;
+          }
+          
+          currentActivity = result.activityInfo.description;
+          workingOnFile = result.activityInfo.fileName;
+          executingCommand = result.activityInfo.command;
+        } else if (result.isIdle) {
+          agentStatus = 'idle';
+        } else {
+          // Check if agent has recent activity
+          const lastActivity = terminalMonitor.getLastActivityTimestamp(agentName);
+          if (lastActivity) {
+            const timeSinceActivity = Date.now() - lastActivity.getTime();
+            if (timeSinceActivity < ACTIVITY_DETECTION_CONFIG.IDLE_TIMEOUT) {
+              agentStatus = 'working';
+              hasActiveAgents = true;
+            }
+          }
+        }
+        
+        // Create enhanced agent status
+        const enhancedStatus: AgentStatus = {
+          id: agentName,
+          name: agentName.charAt(0).toUpperCase() + agentName.slice(1),
+          status: agentStatus,
+          currentActivity,
+          lastActivity: new Date(),
+          terminalOutput: result.lastOutput ? result.lastOutput.slice(-200) : undefined,
+          workingOnFile,
+          executingCommand
+        };
+        
+        // Update activity history if there's new activity
+        if (result.hasNewActivity && result.activityInfo) {
+          updateActivityHistory(agentName, result.activityInfo);
+        }
+        
+        // Broadcast status update with activity details
+        broadcastAgentStatusUpdate(agentName, enhancedStatus);
+      } else {
+        // Agent is offline
+        const offlineStatus: AgentStatus = {
+          id: agentName,
+          name: agentName.charAt(0).toUpperCase() + agentName.slice(1),
+          status: 'offline',
+          lastActivity: new Date()
+        };
+        
+        broadcastAgentStatusUpdate(agentName, offlineStatus);
+      }
     }
-  });
+  } catch (error) {
+    console.error('❌ Error during activity monitoring:', error);
+    // Fall back to basic status detection without activity monitoring
+    const previousClaudeAgents = systemHealthStatus.claudeAgents || {};
+    
+    Object.keys(claudeAgents).forEach(agentName => {
+      const currentStatus = claudeAgents[agentName as keyof typeof claudeAgents];
+      const previousStatus = previousClaudeAgents[agentName as keyof typeof previousClaudeAgents];
+
+      if (currentStatus !== previousStatus) {
+        const status = currentStatus ? 'idle' : 'offline';
+        broadcastAgentStatusUpdate(agentName, status);
+      }
+    });
+  }
+
+  // Adjust check interval based on agent activity
+  updateCheckInterval(hasActiveAgents);
 
   // 全体的な健全性を判定
   const tmuxHealthy = tmuxSessions.president && tmuxSessions.multiagent;
@@ -439,13 +718,9 @@ const performAutoRecovery = async (health: SystemHealth, isManual: boolean = fal
   }
 };
 
-// 定期的なヘルスチェック（最適化版）
-const scheduleHealthCheck = () => {
-  // 初回実行
-  performHealthCheck();
-
-  // 15 秒ごとにチェック（負荷軽減）
-  setInterval(async () => {
+// Start health check interval with current settings
+const startHealthCheckInterval = () => {
+  healthCheckIntervalId = setInterval(async () => {
     const health = await performHealthCheck();
 
     // 自動復旧トリガー条件（より慎重に）
@@ -459,7 +734,18 @@ const scheduleHealthCheck = () => {
         await performAutoRecovery(health);
       }
     }
-  }, 15000);
+  }, currentCheckInterval);
+};
+
+// Enhanced health check scheduling with adaptive intervals
+const scheduleHealthCheck = () => {
+  console.log('🏥 Starting enhanced health check system with activity monitoring');
+  
+  // Initial health check
+  performHealthCheck();
+  
+  // Start the adaptive interval-based health checking
+  startHealthCheckInterval();
 };
 
 // 個別エージェントの完了チェック関数
@@ -706,6 +992,33 @@ const stopTaskCompletionMonitoring = () => {
   console.log('⏹️ Task completion monitoring stopped');
 };
 
+// Initialize real-time agent activity monitoring service
+const initializeAgentActivityMonitoring = () => {
+  if (agentActivityMonitoringService) {
+    agentActivityMonitoringService.stop();
+  }
+  
+  // Create monitoring service with status update callback
+  agentActivityMonitoringService = new AgentActivityMonitoringService(
+    (agentName: string, status: AgentStatus) => {
+      // Broadcast status updates to WebUI
+      broadcastAgentStatusUpdate(agentName, status);
+    },
+    {
+      activeCheckInterval: ACTIVITY_DETECTION_CONFIG.ACTIVE_CHECK_INTERVAL,
+      idleCheckInterval: ACTIVITY_DETECTION_CONFIG.IDLE_CHECK_INTERVAL,
+      maxRetries: 3,
+      gracefulDegradationEnabled: true,
+      performanceOptimizationEnabled: true,
+      maxOutputBufferSize: ACTIVITY_DETECTION_CONFIG.OUTPUT_BUFFER_SIZE
+    }
+  );
+  
+  // Start the monitoring service
+  agentActivityMonitoringService.start();
+  console.log('🔍 Real-time agent activity monitoring service started');
+};
+
 // 初期化
 const initializeSystem = async () => {
   await db.initialize();
@@ -714,8 +1027,11 @@ const initializeSystem = async () => {
   schedulePeriodicRefresh();
   scheduleHealthCheck();
   startTaskCompletionMonitoring();
+  
+  // Initialize real-time agent activity monitoring
+  initializeAgentActivityMonitoring();
 
-  console.log('🚀 Task queue system initialized with Prisma database, usage limit handling, and task completion monitoring');
+  console.log('🚀 Task queue system initialized with Prisma database, usage limit handling, task completion monitoring, and real-time agent activity monitoring');
 };
 
 // Usage limit 検知関数
@@ -822,7 +1138,7 @@ const setUsageLimit = async (errorMessage: string) => {
     }
   });
 
-  await saveTasks();
+  await refreshTaskCache();
 
   // クライアントに通知
   io.emit('usage-limit-reached', {
@@ -858,7 +1174,7 @@ const checkUsageLimitResolution = async (): Promise<boolean> => {
       task.pausedReason = undefined;
     });
 
-    await saveTasks();
+    await refreshTaskCache();
 
     console.log(`✅ Usage limit resolved. Resumed ${pausedTasks.length} paused tasks.`);
 
@@ -953,14 +1269,14 @@ const performProjectStartCleanup = async (): Promise<void> => {
       try {
         // tmux ペインが存在するかチェック
         await execAsync(`tmux has-session -t "${agent.target.split(':')[0]}" 2>/dev/null`);
-        
+
         // 特定のペインを選択してからコマンドを送信
         await execAsync(`tmux select-pane -t "${agent.target}"`);
-        
+
         // 入力を安全にクリアしてから /clear を実行
         await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
         await new Promise(resolve => setTimeout(resolve, 300));
-        
+
         // /clear コマンドを送信（コマンドと Enter を分けて送信）
         await execAsync(`tmux send-keys -t "${agent.target}" '/clear'`);
         await execAsync(`tmux send-keys -t "${agent.target}" C-m`);
@@ -1086,14 +1402,14 @@ const performProjectCompletionCleanup = async (): Promise<void> => {
       try {
         // tmux ペインが存在するかチェック
         await execAsync(`tmux has-session -t "${agent.target.split(':')[0]}" 2>/dev/null`);
-        
+
         // 特定のペインを選択してからコマンドを送信
         await execAsync(`tmux select-pane -t "${agent.target}"`);
-        
+
         // 入力を安全にクリアしてから /clear を実行
         await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
         await new Promise(resolve => setTimeout(resolve, 300));
-        
+
         // /clear コマンドを送信（コマンドと Enter を分けて送信）
         await execAsync(`tmux send-keys -t "${agent.target}" '/clear'`);
         await execAsync(`tmux send-keys -t "${agent.target}" C-m`);
@@ -1150,19 +1466,19 @@ const performTaskCompletionCleanup = async (): Promise<void> => {
       try {
         // tmux ペインが存在するかチェック
         await execAsync(`tmux has-session -t "${agent.target.split(':')[0]}" 2>/dev/null`);
-        
+
         // 特定のペインを選択してからコマンドを送信
         await execAsync(`tmux select-pane -t "${agent.target}"`);
-        
+
         // 入力を安全にクリアしてから /clear を実行
         await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
         await new Promise(resolve => setTimeout(resolve, 300));
-        
+
         // /clear を送信してセッションをクリア（コマンドと Enter を分けて送信）
         await execAsync(`tmux send-keys -t "${agent.target}" '/clear'`);
         await execAsync(`tmux send-keys -t "${agent.target}" C-m`);
         await new Promise(resolve => setTimeout(resolve, 2000)); // クリア処理を待機
-        
+
         // その後 Ctrl+C を送信して Claude Code プロセスを終了
         await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
         await new Promise(resolve => setTimeout(resolve, 500)); // 少し待機
@@ -1308,7 +1624,7 @@ app.get('/api/projects/:projectName/files', async (req, res) => {
   try {
     const { projectName } = req.params;
     const projectPath = path.join(__dirname, '../../workspace', projectName);
-    
+
     // プロジェクトディレクトリの存在確認
     try {
       await fs.access(projectPath);
@@ -1318,7 +1634,7 @@ app.get('/api/projects/:projectName/files', async (req, res) => {
 
     const files = await getProjectFileList(projectPath, '');
     const stats = await fs.stat(projectPath);
-    
+
     const projectStructure = {
       name: projectName,
       path: projectPath,
@@ -1339,7 +1655,7 @@ app.get('/api/projects/:projectName/download/zip', async (req, res) => {
   try {
     const { projectName } = req.params;
     const projectPath = path.join(__dirname, '../../workspace', projectName);
-    
+
     // プロジェクトディレクトリの存在確認
     try {
       await fs.access(projectPath);
@@ -1354,7 +1670,7 @@ app.get('/api/projects/:projectName/download/zip', async (req, res) => {
 
     // アーカイバーを作成
     const archive = archiver('zip', { zlib: { level: 9 } });
-    
+
     // エラーハンドリング
     archive.on('error', (err) => {
       console.error('Archive error:', err);
@@ -1383,24 +1699,24 @@ app.get('/api/projects/:projectName/download/zip', async (req, res) => {
 // プロジェクトファイル一覧取得のヘルパー関数
 const getProjectFileList = async (dirPath: string, relativePath: string): Promise<any[]> => {
   const files: any[] = [];
-  
+
   try {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
       const entryRelativePath = path.join(relativePath, entry.name);
-      
+
       // 隠しファイルや node_modules などをスキップ
-      if (entry.name.startsWith('.') || 
-          entry.name === 'node_modules' || 
-          entry.name === '__pycache__' ||
-          entry.name === '.git') {
+      if (entry.name.startsWith('.') ||
+        entry.name === 'node_modules' ||
+        entry.name === '__pycache__' ||
+        entry.name === '.git') {
         continue;
       }
 
       const stats = await fs.stat(fullPath);
-      
+
       if (entry.isDirectory()) {
         files.push({
           path: entryRelativePath,
@@ -1409,7 +1725,7 @@ const getProjectFileList = async (dirPath: string, relativePath: string): Promis
           type: 'directory',
           modified: stats.mtime
         });
-        
+
         // 再帰的にサブディレクトリを処理
         const subFiles = await getProjectFileList(fullPath, entryRelativePath);
         files.push(...subFiles);
@@ -1426,7 +1742,7 @@ const getProjectFileList = async (dirPath: string, relativePath: string): Promis
   } catch (error) {
     console.error(`Error reading directory ${dirPath}:`, error);
   }
-  
+
   return files;
 };
 
@@ -1449,15 +1765,15 @@ io.on('connection', async (socket) => {
     try {
       // タスク情報を削除前に取得（プロジェクト名を確認するため）
       const task = taskQueue.find(t => t.id === taskId);
-      
+
       const success = await db.deleteTask(taskId);
-      
+
       if (success) {
         // workspace/以下のプロジェクトディレクトリも削除
         if (task?.projectName) {
           try {
             const projectPath = path.join(__dirname, '../../workspace', task.projectName);
-            
+
             // プロジェクトディレクトリが存在するか確認
             try {
               await fs.access(projectPath);
@@ -1472,9 +1788,9 @@ io.on('connection', async (socket) => {
             console.warn(`⚠️ Failed to delete project directory for ${task.projectName}:`, error instanceof Error ? error.message : 'Unknown error');
           }
         }
-        
+
         await refreshTaskCache();
-        
+
         // 全クライアントにタスク削除を通知
         io.emit('task-deleted', { taskId, projectName: task?.projectName });
         console.log(`🗑️ Task deleted: ${taskId}${task?.projectName ? ` (project: ${task.projectName})` : ''}`);
@@ -1785,6 +2101,113 @@ io.on('connection', async (socket) => {
       });
     }
   });
+
+  // Real-time agent activity monitoring control
+  socket.on('toggle-agent-activity-monitoring', (enabled: boolean) => {
+    try {
+      if (enabled && agentActivityMonitoringService && !agentActivityMonitoringService.getHealthStatus().isRunning) {
+        agentActivityMonitoringService.start();
+        socket.emit('agent-activity-monitoring-status', {
+          enabled: true,
+          message: 'Real-time agent activity monitoring started',
+          timestamp: new Date()
+        });
+      } else if (!enabled && agentActivityMonitoringService && agentActivityMonitoringService.getHealthStatus().isRunning) {
+        agentActivityMonitoringService.stop();
+        socket.emit('agent-activity-monitoring-status', {
+          enabled: false,
+          message: 'Real-time agent activity monitoring stopped',
+          timestamp: new Date()
+        });
+      }
+    } catch (error) {
+      socket.emit('agent-activity-monitoring-status', {
+        enabled: false,
+        message: `Error controlling monitoring: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date()
+      });
+    }
+  });
+
+  // Get agent activity monitoring statistics
+  socket.on('get-agent-monitoring-stats', () => {
+    try {
+      if (agentActivityMonitoringService) {
+        const stats = agentActivityMonitoringService.getStats();
+        const healthStatus = agentActivityMonitoringService.getHealthStatus();
+        const agentStates = agentActivityMonitoringService.getAgentStates();
+        
+        socket.emit('agent-monitoring-stats', {
+          stats,
+          healthStatus,
+          agentCount: agentStates.size,
+          timestamp: new Date()
+        });
+      } else {
+        socket.emit('agent-monitoring-stats', {
+          error: 'Monitoring service not initialized',
+          timestamp: new Date()
+        });
+      }
+    } catch (error) {
+      socket.emit('agent-monitoring-stats', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date()
+      });
+    }
+  });
+
+  // Update monitoring service configuration
+  socket.on('update-monitoring-config', (config: any) => {
+    try {
+      if (agentActivityMonitoringService) {
+        agentActivityMonitoringService.updateConfig(config);
+        socket.emit('monitoring-config-updated', {
+          success: true,
+          message: 'Monitoring configuration updated successfully',
+          timestamp: new Date()
+        });
+      } else {
+        socket.emit('monitoring-config-updated', {
+          success: false,
+          message: 'Monitoring service not initialized',
+          timestamp: new Date()
+        });
+      }
+    } catch (error) {
+      socket.emit('monitoring-config-updated', {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date()
+      });
+    }
+  });
+
+  // Reset monitoring statistics
+  socket.on('reset-monitoring-stats', () => {
+    try {
+      if (agentActivityMonitoringService) {
+        agentActivityMonitoringService.resetStats();
+        socket.emit('monitoring-stats-reset', {
+          success: true,
+          message: 'Monitoring statistics reset successfully',
+          timestamp: new Date()
+        });
+      } else {
+        socket.emit('monitoring-stats-reset', {
+          success: false,
+          message: 'Monitoring service not initialized',
+          timestamp: new Date()
+        });
+      }
+    } catch (error) {
+      socket.emit('monitoring-stats-reset', {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date()
+      });
+    }
+  });
 });
 
 // 定期的にタスクキューをチェック（バックアップ処理）
@@ -1797,6 +2220,12 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
 
   try {
+    // Stop real-time agent activity monitoring service
+    if (agentActivityMonitoringService) {
+      agentActivityMonitoringService.stop();
+      console.log('🔍 Agent activity monitoring service stopped');
+    }
+
     // データベース接続を閉じる
     await db.disconnect();
     console.log('💾 Database disconnected');

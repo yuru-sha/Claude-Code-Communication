@@ -108,7 +108,7 @@ function App() {
       }
     });
 
-    // エージェント状態のリアルタイム更新
+    // エージェント状態のリアルタイム更新（拡張版）
     socket.on('agent-status-updated', (agentUpdate: any) => {
       console.log('🔄 Agent status update received:', agentUpdate);
       setAgents(prev => prev.map(agent => 
@@ -116,10 +116,36 @@ function App() {
           ? { 
               ...agent, 
               status: agentUpdate.status,
-              currentTask: agentUpdate.currentTask || undefined 
+              currentTask: agentUpdate.currentActivity || agentUpdate.currentTask || undefined,
+              // 拡張フィールドを追加
+              workingOnFile: agentUpdate.workingOnFile,
+              executingCommand: agentUpdate.executingCommand,
+              lastActivity: agentUpdate.lastActivity
             } 
           : agent
       ));
+    });
+
+    // 詳細な活動検知イベント
+    socket.on('agent-activity-detected', (activityInfo: any) => {
+      console.log('🎯 Agent activity detected:', activityInfo);
+      // 活動検知の詳細情報を状態に反映（オプション）
+      setAgents(prev => prev.map(agent => 
+        agent.id === activityInfo.agentId 
+          ? { 
+              ...agent,
+              lastActivityType: activityInfo.activityType,
+              lastActivityDescription: activityInfo.description
+            } 
+          : agent
+      ));
+    });
+
+    // 詳細なエージェント状態イベント
+    socket.on('agent-detailed-status', (detailedStatus: any) => {
+      console.log('📊 Detailed agent status received:', detailedStatus);
+      // 詳細状態情報を必要に応じて処理
+      // 現在は基本的な状態更新のみ実装
     });
 
     socket.on('task-retried', (task: Task) => {
@@ -211,6 +237,8 @@ function App() {
       socket.off('task-queue-updated');
       socket.off('system-health');
       socket.off('agent-status-updated');
+      socket.off('agent-activity-detected');
+      socket.off('agent-detailed-status');
       socket.off('auto-recovery-performed');
       socket.off('auto-recovery-status');
       socket.off('auto-recovery-failed');

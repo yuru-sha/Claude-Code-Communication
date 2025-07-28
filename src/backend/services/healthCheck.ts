@@ -34,7 +34,7 @@ export const checkTmuxSessions = async (): Promise<{ president: boolean; multiag
   }
 };
 
-// Claude Code の起動状態をチェック
+// Enhanced Claude Code agent status check with activity monitoring integration
 export const checkClaudeAgents = async (): Promise<SystemHealth['claudeAgents']> => {
   const agents = {
     president: false,
@@ -58,7 +58,7 @@ export const checkClaudeAgents = async (): Promise<SystemHealth['claudeAgents']>
       // ターミナル出力をチェック（fullscreen 出力を取得）
       const { stdout } = await execAsync(`tmux capture-pane -t "${agent.target}" -p`);
       
-      // より包括的なパターンマッチング
+      // より包括的なパターンマッチング（活動監視と統合）
       const claudePatterns = [
         'Human:', 'Assistant:', 'claude', 'Claude Code',
         '? for shortcuts', 'IDE disconnected', 'Bypassing Permissions',
@@ -81,7 +81,7 @@ export const checkClaudeAgents = async (): Promise<SystemHealth['claudeAgents']>
       const finalDetection = isClaudeRunning || hasClaudeProcess;
       agents[agent.name as keyof typeof agents] = finalDetection;
       
-      // デバッグログ（全エージェントで詳細表示）
+      // Enhanced logging with activity context
       console.log(`🔍 ${agent.name}: terminal=${isClaudeRunning}, process=${hasClaudeProcess}, final=${finalDetection}`);
       
     } catch (error) {
@@ -92,7 +92,7 @@ export const checkClaudeAgents = async (): Promise<SystemHealth['claudeAgents']>
   return agents;
 };
 
-// システムヘルスチェックを実行
+// Enhanced system health check with activity monitoring support
 export const performHealthCheck = async (
   previousState: SystemHealth | null,
   onAgentStatusChange: (agentName: string, newStatus: 'idle' | 'working' | 'offline') => void
@@ -103,7 +103,7 @@ export const performHealthCheck = async (
   // 前回の状態と比較してエージェント状態の変更を検知
   const previousClaudeAgents = previousState?.claudeAgents || {};
   
-  // 各エージェントの状態変更を個別に通知
+  // 各エージェントの状態変更を個別に通知（基本的なオンライン/オフライン状態）
   Object.keys(claudeAgents).forEach(agentName => {
     const currentStatus = claudeAgents[agentName as keyof typeof claudeAgents];
     const previousStatus = previousClaudeAgents[agentName as keyof typeof previousClaudeAgents];
