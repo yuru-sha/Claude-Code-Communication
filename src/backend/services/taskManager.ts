@@ -53,6 +53,7 @@ export const saveUsageLimitToDatabase = async (errorMessage: string): Promise<vo
     let nextRetryAt: Date;
     
     // Claude Code メッセージから時刻を抽出（例: "reset at 7am (Asia/Tokyo)"）
+    console.log(`🔍 メッセージパターン解析: "${errorMessage}"`);
     const timeMatch = errorMessage.match(/reset\s*at\s*(\d{1,2})(am|pm)\s*\(Asia\/Tokyo\)/i);
     
     if (timeMatch) {
@@ -67,17 +68,16 @@ export const saveUsageLimitToDatabase = async (errorMessage: string): Promise<vo
         resetHour = 0;
       }
       
-      // 今日の指定時刻を設定
-      const resetTime = new Date();
-      resetTime.setHours(resetHour, 0, 0, 0);
+      // JST での指定時刻を作成（今日の場合）
+      const resetTimeToday = new Date();
+      resetTimeToday.setHours(resetHour, 0, 0, 0);
       
-      // もし指定時刻が過去なら、翌日に設定
-      if (resetTime <= now) {
-        resetTime.setDate(resetTime.getDate() + 1);
-      }
+      // JST から UTC に変換して設定
+      const utcResetTime = new Date(resetTimeToday.getTime() - (9 * 60 * 60 * 1000));
       
-      nextRetryAt = resetTime;
+      nextRetryAt = utcResetTime;
       console.log(`⏰ Usage limit 検出: ${timeMatch[1]}${timeMatch[2]} (Asia/Tokyo) にリセット予定`);
+      console.log(`📅 設定されたリセット時刻: ${utcResetTime.toISOString()} (UTC) / ${utcResetTime.toLocaleString('ja-JP', {timeZone: 'Asia/Tokyo'})} (JST)`);
       
     } else {
       // メッセージから待機時間を抽出（例: "Try again in 60 minutes"）
@@ -93,9 +93,9 @@ export const saveUsageLimitToDatabase = async (errorMessage: string): Promise<vo
         nextRetryAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
         console.log(`⏰ Usage limit 検出: ${hours}時間後に再試行`);
       } else {
-        // フォールバック: 1 時間後に再試行（指数バックオフは削除）
+        // フォールバック: 1 時間後に再試行
         nextRetryAt = new Date(now.getTime() + (60 * 60 * 1000));
-        console.log(`⏰ Usage limit 検出: 1 時間後に再試行`);
+        console.log(`⏰ Usage limit 検出: 1 時間後に再試行 (フォールバック)`);
       }
     }
     

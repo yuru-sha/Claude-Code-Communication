@@ -2431,6 +2431,7 @@ const startUsageLimitMonitoring = async () => {
         const resetTime = new Date(usageLimitState.nextRetryAt);
         
         console.log(`⏰ Usage limit check: Current time: ${now.toISOString()}, Reset time: ${resetTime.toISOString()}`);
+        console.log(`🕐 現在時刻 (JST): ${now.toLocaleString('ja-JP', {timeZone: 'Asia/Tokyo'})}, リセット時刻 (JST): ${resetTime.toLocaleString('ja-JP', {timeZone: 'Asia/Tokyo'})}`);
         
         if (now >= resetTime) {
           console.log('🎉 Usage limit has been automatically resolved!');
