@@ -7,16 +7,15 @@ import { promisify } from 'util';
 import fs from 'fs/promises';
 import archiver from 'archiver';
 import { db, Task, UsageLimitState } from './database';
-import { AgentStatus, AgentStatusType, ACTIVITY_DETECTION_CONFIG, ActivityInfo } from '../types';
-import { TerminalOutputMonitor } from './services/terminalOutputMonitor';
-import { ActivityAnalyzer } from './services/activityAnalyzer';
+import { AgentStatus, AgentStatusType, ACTIVITY_DETECTION_CONFIG, ActivityInfo, ActivityType } from '../types';
+import serviceContainer from './services/ServiceContainer';
 import { 
   sendToAgent, 
   checkUsageLimitResolution, 
   processTaskQueue,
   assignTaskToPresident as taskManagerAssignTaskToPresident
 } from './services/taskManager';
-import { TmuxManager } from './services/tmuxManager';
+import { serverManager } from './utils/ServerManager';
 
 const execAsync = promisify(exec);
 
@@ -39,18 +38,11 @@ app.use(express.json());
 let taskQueue: Task[] = [];
 
 
-// Activity monitoring instances
-const terminalMonitor = new TerminalOutputMonitor();
-const activityAnalyzer = new ActivityAnalyzer();
-
-// Tmux management instance
-const tmuxManager = new TmuxManager();
-
-// Import the real-time monitoring service
-import { AgentActivityMonitoringService } from './services/agentActivityMonitoringService';
-
-// Real-time monitoring service instance
-let agentActivityMonitoringService: AgentActivityMonitoringService | null = null;
+// Service instances through ServiceContainer
+const terminalMonitor = serviceContainer.terminalOutputMonitor;
+const activityAnalyzer = serviceContainer.activityAnalyzer;
+const tmuxManager = serviceContainer.tmuxManager;
+const agentActivityMonitoringService = serviceContainer.agentActivityMonitoringService;
 
 // Adaptive check intervals based on agent activity
 let currentCheckInterval: number = ACTIVITY_DETECTION_CONFIG.IDLE_CHECK_INTERVAL;
@@ -85,7 +77,7 @@ const updateCheckInterval = (hasActiveAgents: boolean): void => {
     
     // Restart the health check interval with new timing
     if (healthCheckIntervalId) {
-      clearInterval(healthCheckIntervalId);
+      serverManager.clearInterval(healthCheckIntervalId);
       startHealthCheckInterval();
     }
   }
@@ -102,11 +94,27 @@ const refreshTaskCache = async (): Promise<void> => {
   }
 };
 
-// 定期的なキャッシュ更新
+// 定期的なキャッシュ更新（メモリリーク修正版）
+let refreshCacheInterval: NodeJS.Timeout | null = null;
+
 const schedulePeriodicRefresh = () => {
-  setInterval(async () => {
+  if (refreshCacheInterval) {
+    serverManager.clearInterval(refreshCacheInterval);
+  }
+  
+  refreshCacheInterval = serverManager.setInterval(async () => {
     await refreshTaskCache();
   }, 30000); // 30 秒ごと
+  
+  console.log('🔄 Scheduled periodic cache refresh (30s interval)');
+};
+
+const stopPeriodicRefresh = () => {
+  if (refreshCacheInterval) {
+    serverManager.clearInterval(refreshCacheInterval);
+    refreshCacheInterval = null;
+    console.log('⏹️  Stopped periodic cache refresh');
+  }
 };
 
 // システムヘルスチェック
@@ -704,9 +712,13 @@ const performAutoRecovery = async (health: SystemHealth, isManual: boolean = fal
   }
 };
 
-// Start health check interval with current settings
+// Start health check interval with current settings（メモリリーク修正版）
 const startHealthCheckInterval = () => {
-  healthCheckIntervalId = setInterval(async () => {
+  if (healthCheckIntervalId) {
+    serverManager.clearInterval(healthCheckIntervalId);
+  }
+  
+  healthCheckIntervalId = serverManager.setInterval(async () => {
     const health = await performHealthCheck();
 
     // 自動復旧トリガー条件（より慎重に）
@@ -971,54 +983,61 @@ const checkTaskCompletion = async (): Promise<void> => {
   await Promise.all(checkPromises);
 };
 
-// タスク完了検知の開始/停止（最適化版）
+// タスク完了検知の開始/停止（最適化版・メモリリーク修正版）
+let taskCompletionInterval: NodeJS.Timeout | null = null;
+let taskCompletionTimeout: NodeJS.Timeout | null = null;
+
 const startTaskCompletionMonitoring = () => {
   if (isTaskCompletionCheckActive) return;
 
   isTaskCompletionCheckActive = true;
   console.log('🔍 Task completion monitoring started');
 
+  // 既存のタイマーをクリア
+  if (taskCompletionInterval) {
+    serverManager.clearInterval(taskCompletionInterval);
+  }
+  if (taskCompletionTimeout) {
+    serverManager.clearTimeout(taskCompletionTimeout);
+  }
+
   // 45 秒ごとにチェック（頻度を下げて精度向上）
-  const completionCheckInterval = setInterval(async () => {
+  taskCompletionInterval = serverManager.setInterval(async () => {
     await checkTaskCompletion();
   }, 45000);
 
   // 初回実行（10 秒後に開始）
-  setTimeout(() => checkTaskCompletion(), 10000);
+  taskCompletionTimeout = serverManager.setTimeout(() => checkTaskCompletion(), 10000);
 
-  return completionCheckInterval;
+  return taskCompletionInterval;
 };
 
 const stopTaskCompletionMonitoring = () => {
   isTaskCompletionCheckActive = false;
+  
+  // タイマーをクリア
+  if (taskCompletionInterval) {
+    serverManager.clearInterval(taskCompletionInterval);
+    taskCompletionInterval = null;
+  }
+  if (taskCompletionTimeout) {
+    serverManager.clearTimeout(taskCompletionTimeout);
+    taskCompletionTimeout = null;
+  }
+  
   console.log('⏹️ Task completion monitoring stopped');
 };
 
 // Initialize real-time agent activity monitoring service
 const initializeAgentActivityMonitoring = () => {
-  if (agentActivityMonitoringService) {
-    agentActivityMonitoringService.stop();
-  }
+  // Set usage limit callback for terminal monitor
+  terminalMonitor.setUsageLimitCallback(handleUsageLimit);
   
-  // Create monitoring service with status update callback
-  agentActivityMonitoringService = new AgentActivityMonitoringService(
-    (agentName: string, status: AgentStatus) => {
-      // Broadcast status updates to WebUI
-      broadcastAgentStatusUpdate(agentName, status);
-    },
-    {
-      activeCheckInterval: ACTIVITY_DETECTION_CONFIG.ACTIVE_CHECK_INTERVAL,
-      idleCheckInterval: ACTIVITY_DETECTION_CONFIG.IDLE_CHECK_INTERVAL,
-      maxRetries: 3,
-      gracefulDegradationEnabled: true,
-      performanceOptimizationEnabled: true,
-      maxOutputBufferSize: ACTIVITY_DETECTION_CONFIG.OUTPUT_BUFFER_SIZE
-    }
-  );
+  // AgentActivityMonitoringService is now managed by ServiceContainer
   
   // Start the monitoring service
   agentActivityMonitoringService.start();
-  console.log('🔍 Real-time agent activity monitoring service started');
+  console.log('🔍 Real-time agent activity monitoring service started with usage limit detection');
 };
 
 // 初期化
@@ -1038,25 +1057,46 @@ const initializeSystem = async () => {
 
 
 // Usage limit 解除時の server 固有処理
-const handleUsageLimitResolved = (data: any) => {
-  // paused 状態のタスクを pending に戻す server 固有処理
-  const pausedTasks = taskQueue.filter(t => t.status === 'paused');
-  pausedTasks.forEach(task => {
-    task.status = 'pending';
-    task.pausedReason = undefined;
-  });
+const handleUsageLimitResolved = async (data: any) => {
+  try {
+    // データベースから paused 状態のタスクを取得
+    const allTasks = await db.getAllTasks();
+    const pausedTasks = allTasks.filter(t => t.status === 'paused');
+    
+    console.log(`🔄 Usage limit resolved. Resuming ${pausedTasks.length} paused tasks...`);
+    
+    // データベースでタスクを pending に戻す
+    for (const task of pausedTasks) {
+      await db.updateTask(task.id, { 
+        status: 'pending',
+        pausedReason: undefined 
+      });
+      console.log(`▶️ Task resumed from pause: ${task.title} (ID: ${task.id})`);
+    }
+    
+    // メモリキューも更新
+    pausedTasks.forEach(task => {
+      const index = taskQueue.findIndex(t => t.id === task.id);
+      if (index !== -1) {
+        taskQueue[index] = { ...taskQueue[index], status: 'pending', pausedReason: undefined };
+      }
+    });
 
-  refreshTaskCache();
+    // メモリキャッシュを更新
+    await refreshTaskCache();
 
-  console.log(`✅ Usage limit resolved. Resumed ${pausedTasks.length} paused tasks.`);
+    console.log(`✅ Usage limit resolved. Resumed ${pausedTasks.length} paused tasks.`);
 
-  // クライアントに通知
-  io.emit('usage-limit-resolved', {
-    message: data.message,
-    resumedTasks: pausedTasks.length,
-    timestamp: data.timestamp,
-    previousRetryCount: data.previousRetryCount
-  });
+    // クライアントに通知
+    io.emit('usage-limit-resolved', {
+      message: data.message,
+      resumedTasks: pausedTasks.length,
+      timestamp: data.timestamp,
+      previousRetryCount: data.previousRetryCount
+    });
+  } catch (error) {
+    console.error('❌ Error handling usage limit resolution:', error);
+  }
 };
 
 // Usage limit 検知時の server 固有処理
@@ -1069,13 +1109,20 @@ const handleUsageLimit = async (errorMessage: string) => {
     const inProgressTasks = allTasks.filter(t => t.status === 'in_progress');
     
     for (const task of inProgressTasks) {
-      await db.updateTask(task.id, { status: 'paused' });
+      await db.updateTask(task.id, { 
+        status: 'paused',
+        pausedReason: `Usage limit reached: ${errorMessage}` 
+      });
       console.log(`⏸️ Task paused due to usage limit: ${task.title} (ID: ${task.id})`);
       
       // タスクキューも更新
       const index = taskQueue.findIndex(t => t.id === task.id);
       if (index !== -1) {
-        taskQueue[index] = { ...taskQueue[index], status: 'paused' };
+        taskQueue[index] = { 
+          ...taskQueue[index], 
+          status: 'paused',
+          pausedReason: `Usage limit reached: ${errorMessage}`
+        };
       }
     }
     
@@ -2050,7 +2097,7 @@ io.on('connection', async (socket) => {
       }
 
       // データベースのステータスを cancelled に変更
-      await db.updateTaskStatus(task.id, 'cancelled');
+      await db.updateTask(task.id, { status: 'cancelled', cancelledAt: new Date() });
       
       // メモリキャッシュでもステータス更新（projectName と assignedTo は履歴として保持）
       taskQueue[taskIndex] = {
@@ -2354,30 +2401,54 @@ io.on('connection', async (socket) => {
   });
 });
 
-// 定期的にタスクキューをチェック（バックアップ処理）
-setInterval(() => {
-  processTaskQueue(
-    taskQueue,
-    checkUsageLimitResolution,
-    assignTaskToPresident,
-    handleTaskAssigned,
-    handleUsageLimitResolved
-  );
-}, 30000); // 30 秒ごと
+// 定期的にタスクキューをチェック（バックアップ処理・メモリリーク修正版）
+let taskQueueProcessingInterval: NodeJS.Timeout | null = null;
+
+const startTaskQueueProcessing = () => {
+  taskQueueProcessingInterval = serverManager.setInterval(() => {
+    processTaskQueue(
+      taskQueue,
+      checkUsageLimitResolution,
+      assignTaskToPresident,
+      handleTaskAssigned,
+      handleUsageLimitResolved
+    );
+  }, 30000); // 30 秒ごと
+  
+  console.log('🔄 Started task queue processing (30s interval)');
+};
+
+const stopTaskQueueProcessing = () => {
+  if (taskQueueProcessingInterval) {
+    serverManager.clearInterval(taskQueueProcessingInterval);
+    taskQueueProcessingInterval = null;
+    console.log('⏹️  Stopped task queue processing');
+  }
+};
+
+// タスクキュー処理を開始
+startTaskQueueProcessing();
 
 // Graceful shutdown
 const gracefulShutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}, shutting down gracefully...`);
 
   try {
+    // Stop all intervals and timeouts (メモリリーク防止)
+    stopPeriodicRefresh();
+    stopTaskCompletionMonitoring();
+    stopTaskQueueProcessing();
+    stopUsageLimitMonitoring();
+    
+    // ServerManager cleanup
+    serverManager.cleanup();
+    console.log('🧹 All timers cleaned up');
+
     // Stop real-time agent activity monitoring service
     if (agentActivityMonitoringService) {
       agentActivityMonitoringService.stop();
       console.log('🔍 Agent activity monitoring service stopped');
     }
-
-    // Usage Limit 監視タイマーを停止
-    stopUsageLimitMonitoring();
 
     // データベース接続を閉じる
     await db.disconnect();
@@ -2471,13 +2542,13 @@ const startUsageLimitMonitoring = async () => {
   // 最初のチェックを実行
   await checkUsageLimitReset();
   
-  // 1 分ごとにチェック
-  usageLimitMonitorTimer = setInterval(checkUsageLimitReset, 60 * 1000);
+  // 1 分ごとにチェック（メモリリーク修正版）
+  usageLimitMonitorTimer = serverManager.setInterval(checkUsageLimitReset, 60 * 1000);
 };
 
 const stopUsageLimitMonitoring = () => {
   if (usageLimitMonitorTimer) {
-    clearInterval(usageLimitMonitorTimer);
+    serverManager.clearInterval(usageLimitMonitorTimer);
     usageLimitMonitorTimer = null;
     console.log('🛑 Usage limit monitoring stopped');
   }
@@ -2628,3 +2699,28 @@ const startServer = async () => {
 
 // 起動
 startServer();
+
+// Graceful shutdown handling
+process.on('SIGTERM', async () => {
+  console.log('🔧 SIGTERM received, starting graceful shutdown...');
+  await serviceContainer.shutdown();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('🔧 SIGINT received, starting graceful shutdown...');
+  await serviceContainer.shutdown();
+  process.exit(0);
+});
+
+process.on('uncaughtException', async (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  await serviceContainer.shutdown();
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  await serviceContainer.shutdown();
+  process.exit(1);
+});

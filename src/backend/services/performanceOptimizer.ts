@@ -104,6 +104,11 @@ export class PerformanceOptimizer {
       return;
     }
 
+    // Clear existing timer first
+    if (this.optimizationTimer) {
+      clearInterval(this.optimizationTimer);
+    }
+    
     this.optimizationTimer = setInterval(() => {
       this.performAutomaticOptimization();
     }, this.config.optimizationIntervalMs);

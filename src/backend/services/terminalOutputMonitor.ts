@@ -189,6 +189,7 @@ export class TerminalOutputMonitor {
   private lastOutputs: Map<string, string> = new Map();
   private activityTimestamps: Map<string, Date> = new Map();
   private lastActivityDetected: Map<string, Date> = new Map();
+  private onUsageLimit?: (errorMessage: string) => Promise<void>;
 
   // Performance optimization: Circular buffers for efficient memory usage
   private outputBuffers: Map<string, CircularBuffer> = new Map();
@@ -206,9 +207,10 @@ export class TerminalOutputMonitor {
     { name: 'worker3', target: 'multiagent:0.3' }
   ];
 
-  constructor() {
+  constructor(onUsageLimit?: (errorMessage: string) => Promise<void>) {
     this.maxBufferSize = ACTIVITY_DETECTION_CONFIG.OUTPUT_BUFFER_SIZE;
     this.cleanupInterval = 300000; // 5 minutes
+    this.onUsageLimit = onUsageLimit;
 
     // Initialize performance metrics
     this.performanceMetrics = {
@@ -288,6 +290,11 @@ export class TerminalOutputMonitor {
     if (currentOutput && detectUsageLimit(currentOutput)) {
       console.log(`🚨 Usage limit detected in terminal output for ${agent.name}: ${currentOutput.substring(0, 200)}...`);
       await saveUsageLimitToDatabase(currentOutput);
+      
+      // Usage limit 処理を実行 (import が必要)
+      if (this.onUsageLimit) {
+        await this.onUsageLimit(currentOutput);
+      }
     }
 
     // Store current output for next comparison
@@ -629,6 +636,11 @@ export class TerminalOutputMonitor {
    * Requirement 5.2: Add memory cleanup for old activity data
    */
   private startPeriodicCleanup(): void {
+    // Clear existing timer first
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+    }
+    
     this.cleanupTimer = setInterval(() => {
       this.performMemoryCleanup();
     }, this.cleanupInterval);
@@ -881,5 +893,12 @@ export class TerminalOutputMonitor {
     this.outputBuffers.clear();
 
     console.log(`🧹 [${new Date().toISOString()}] TerminalOutputMonitor cleanup completed`);
+  }
+
+  /**
+   * Set usage limit callback after initialization
+   */
+  setUsageLimitCallback(callback: (errorMessage: string) => Promise<void>): void {
+    this.onUsageLimit = callback;
   }
 }

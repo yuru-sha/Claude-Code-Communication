@@ -16,33 +16,52 @@ export const Terminal = ({ title }: { title: string }) => {
 
   useEffect(() => {
     const target = getTargetFromTitle(title);
+    let isActive = true; // クリーンアップフラグ
     
     if (target) {
       // 定期的に tmux の内容を取得
       const fetchContent = async () => {
+        // コンポーネントがアンマウントされていたら処理しない
+        if (!isActive) return;
+        
         try {
           const response = await fetch(`/api/terminal/${target}`);
           if (response.ok) {
             const data = await response.text();
-            setContent(data);
+            if (isActive) { // 非同期処理完了時にもチェック
+              setContent(data);
+            }
           } else {
-            setContent(`[${new Date().toLocaleTimeString()}] Agent is starting...\n[${new Date().toLocaleTimeString()}] Please wait for Claude authentication...`);
+            if (isActive) {
+              setContent(`[${new Date().toLocaleTimeString()}] Agent is starting...\n[${new Date().toLocaleTimeString()}] Please wait for Claude authentication...`);
+            }
           }
         } catch (error) {
-          setContent(`[${new Date().toLocaleTimeString()}] Terminal for ${title} - Status: Connecting...\n[${new Date().toLocaleTimeString()}] Checking agent status...`);
+          if (isActive) {
+            setContent(`[${new Date().toLocaleTimeString()}] Terminal for ${title} - Status: Connecting...\n[${new Date().toLocaleTimeString()}] Checking agent status...`);
+          }
         }
       };
 
       // 初回実行
       fetchContent();
       
-      // 5 秒ごとに更新
+      // 5 秒ごとに更新（メモリリーク修正版）
       const interval = setInterval(fetchContent, 5000);
       
-      return () => clearInterval(interval);
+      return () => {
+        isActive = false; // コンポーネントのアンマウント時にフラグを設定
+        clearInterval(interval);
+        console.log(`🧹 Terminal cleanup for ${title}`);
+      };
     } else {
       setContent(`[${new Date().toLocaleTimeString()}] Terminal for ${title} - Ready\n[${new Date().toLocaleTimeString()}] Waiting for commands...`);
     }
+    
+    // クリーンアップ関数
+    return () => {
+      isActive = false;
+    };
   }, [title]);
 
   useEffect(() => {

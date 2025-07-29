@@ -777,11 +777,10 @@ body {
 }
 
 .panel-header {
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
   border-bottom: 1px solid rgba(51, 65, 85, 0.3);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   background: rgba(51, 65, 85, 0.2);
 }
 
@@ -1067,25 +1066,21 @@ body {
 
 /* Task Pipeline */
 .task-stats {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(2, auto);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-xs);
-  max-width: 400px;
-  min-width: 300px;
-  margin-bottom: var(--space-sm);
+  margin-top: var(--space-sm);
+  margin-bottom: 0;
 }
 
-.task-stats .stat-chip.total {
-  grid-column: 1 / -1;
-}
+/* task-stats .stat-chip.total は削除されました */
 
 .stat-chip {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  padding: 6px var(--space-sm);
-  border-radius: var(--radius-lg);
+  padding: 4px var(--space-sm);
+  border-radius: var(--radius-md);
   white-space: nowrap;
   flex-shrink: 0;
   min-width: fit-content;
@@ -1094,7 +1089,7 @@ body {
   border: none;
   background: inherit;
   color: inherit;
-  height: 28px;
+  height: 24px;
 }
 
 .stat-chip.clickable {
@@ -1135,6 +1130,11 @@ body {
 .stat-chip.failed {
   background: rgba(239, 68, 68, 0.2);
   color: var(--error);
+}
+
+.stat-chip.paused {
+  background: rgba(251, 146, 60, 0.2);
+  color: #F97316;
 }
 
 .stat-chip.cancelled {
@@ -1208,7 +1208,8 @@ body {
 }
 
 .task-card.paused {
-  border-left: 4px solid var(--error);
+  border-left: 4px solid #F97316;
+  background: rgba(251, 146, 60, 0.05);
 }
 
 .task-card.failed {
@@ -1274,8 +1275,8 @@ body {
 }
 
 .task-status.paused {
-  background: rgba(239, 68, 68, 0.2);
-  color: var(--error);
+  background: rgba(251, 146, 60, 0.2);
+  color: #F97316;
 }
 
 .task-status.failed {
@@ -1890,7 +1891,24 @@ body {
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  margin-bottom: var(--space-sm);
+  margin-bottom: 0;
+}
+
+.title-section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.task-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: rgba(51, 65, 85, 0.3);
+  padding: 4px var(--space-sm);
+  border-radius: var(--radius-md);
 }
 
 .header-actions {
@@ -1964,8 +1982,8 @@ body {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
-  padding: var(--space-md);
-  margin: var(--space-xs) 0 var(--space-sm) 0;
+  padding: var(--space-sm);
+  margin: var(--space-xs) 0 0 0;
   animation: slideDown 0.2s ease-out;
   width: 100%;
   box-sizing: border-box;
@@ -2099,6 +2117,12 @@ body {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-md);
+  }
+  
+  .title-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
   }
   
   .header-actions {

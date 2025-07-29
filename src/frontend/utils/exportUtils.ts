@@ -127,7 +127,7 @@ export const exportToHTML = (tasks: Task[], filename: string = 'tasks-report') =
         .status-in_progress { background: #dbeafe; color: #1e40af; }
         .status-completed { background: #d1fae5; color: #065f46; }
         .status-failed { background: #fee2e2; color: #991b1b; }
-        .status-paused { background: #f3f4f6; color: #374151; }
+        .status-paused { background: #fed7aa; color: #c2410c; }
         .footer {
             margin-top: 30px;
             text-align: center;

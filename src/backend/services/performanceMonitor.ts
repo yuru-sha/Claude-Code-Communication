@@ -118,6 +118,11 @@ export class PerformanceMonitor {
     }
 
     this.startTime = new Date();
+    // Clear existing timer first
+    if (this.monitoringTimer) {
+      clearInterval(this.monitoringTimer);
+    }
+    
     this.monitoringTimer = setInterval(() => {
       this.collectMetrics();
     }, this.monitoringInterval);

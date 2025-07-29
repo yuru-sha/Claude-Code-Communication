@@ -3,47 +3,8 @@ import { useSocket } from './hooks/useSocket';
 import { Activity, Users, CheckCircle, Clock, AlertCircle, Terminal, Send, BarChart3, TrendingUp, X, RefreshCw, AlertTriangle, History, ChevronDown, ChevronUp, Heart, Shield, ShieldAlert, ShieldOff } from 'lucide-react';
 import { TaskPipeline } from './components/TaskPipeline';
 import { DashboardHeader } from './components/DashboardHeader';
+import { Task, Agent, SystemHealth } from '../types';
 import './styles/dashboard.css';
-
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'paused' | 'failed' | 'cancelled';
-  assignedTo?: string;
-  projectName?: string;
-  failureReason?: string;
-  errorHistory?: string[];
-  retryCount?: number;
-  createdAt: Date;
-  cancelledAt?: Date;
-}
-
-interface Agent {
-  id: string;
-  name: string;
-  role: string;
-  status: 'idle' | 'working' | 'offline';
-  currentTask?: string;
-  tasksCompleted?: number;
-  efficiency?: number;
-}
-
-interface SystemHealth {
-  tmuxSessions: {
-    president: boolean;
-    multiagent: boolean;
-  };
-  claudeAgents: {
-    president: boolean;
-    boss1: boolean;
-    worker1: boolean;
-    worker2: boolean;
-    worker3: boolean;
-  };
-  overallHealth: 'healthy' | 'degraded' | 'critical';
-  timestamp: Date;
-}
 
 function App() {
   const { socket, isConnected, connectionError } = useSocket();

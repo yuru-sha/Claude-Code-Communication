@@ -9,7 +9,7 @@ export interface Task {
   id: string;
   title: string;
   description: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'paused' | 'failed';
+  status: 'pending' | 'in_progress' | 'completed' | 'paused' | 'failed' | 'cancelled';
   assignedTo?: string;
   pausedReason?: string;
   failureReason?: string;
@@ -20,6 +20,7 @@ export interface Task {
   deliverables?: string[];
   createdAt: Date;
   updatedAt: Date;
+  cancelledAt?: Date;
 }
 
 // Usage Limit 状態のインターフェース
@@ -281,7 +282,8 @@ export class Database {
       in_progress: 0,
       completed: 0,
       paused: 0,
-      failed: 0
+      failed: 0,
+      cancelled: 0
     };
 
     counts.forEach(count => {

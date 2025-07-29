@@ -754,6 +754,11 @@ export class ActivityAnalyzer {
    * Start periodic cache cleanup
    */
   private startCacheCleanup(): void {
+    // Clear existing timer first
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+    }
+    
     this.cleanupTimer = setInterval(() => {
       this.performCacheCleanup();
     }, this.cacheExpiryTime);

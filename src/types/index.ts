@@ -50,7 +50,7 @@ export interface Agent {
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 // タスクの状態
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'paused' | 'failed';
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'paused' | 'failed' | 'cancelled';
 
 // タスク情報
 export interface Task {
@@ -65,6 +65,7 @@ export interface Task {
   retryCount?: number;
   createdAt: Date;
   updatedAt?: Date;
+  cancelledAt?: Date;
 }
 
 // システムヘルス
@@ -167,11 +168,11 @@ export const AGENT_SPECIALTIES = {
 
 // 活動検知設定定数
 export const ACTIVITY_DETECTION_CONFIG = {
-  ACTIVE_CHECK_INTERVAL: 10000,    // 10秒（アクティブ時）
-  IDLE_CHECK_INTERVAL: 30000,      // 30秒（アイドル時）
-  IDLE_TIMEOUT: 300000,            // 5分（アイドル判定）
-  OUTPUT_BUFFER_SIZE: 200,         // 最新200行を監視
-  ACTIVITY_DEBOUNCE: 2000          // 2秒のデバウンス
+  ACTIVE_CHECK_INTERVAL: 10000,    // 10 秒（アクティブ時）
+  IDLE_CHECK_INTERVAL: 30000,      // 30 秒（アイドル時）
+  IDLE_TIMEOUT: 300000,            // 5 分（アイドル判定）
+  OUTPUT_BUFFER_SIZE: 200,         // 最新 200 行を監視
+  ACTIVITY_DEBOUNCE: 2000          // 2 秒のデバウンス
 } as const;
 
 // Note: Activity patterns are now managed by ActivityPatternService

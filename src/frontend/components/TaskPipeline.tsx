@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Activity, AlertCircle, Clock, CheckCircle, X, AlertTriangle, RefreshCw, History, ChevronDown, ChevronUp, Search, Filter, RotateCcw, Download, FileText, Database, Globe, Trash2, StopCircle } from 'lucide-react';
+import { Activity, AlertCircle, Clock, CheckCircle, X, AlertTriangle, RefreshCw, History, ChevronDown, ChevronUp, Search, Filter, RotateCcw, Download, FileText, Database, Globe, Trash2, StopCircle, Pause } from 'lucide-react';
 import { Task } from '../../types';
 import { downloadProjectAsZip } from '../utils/projectDownloadUtils';
 
@@ -141,7 +141,13 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
     <div className="panel large">
       <div className="panel-header">
         <div className="panel-header-top">
-          <h2 className="panel-title">Task Pipeline</h2>
+          <div className="title-section">
+            <h2 className="panel-title">Task Pipeline</h2>
+            <div className="task-count">
+              <Activity size={14} />
+              <span>{taskStats.total}件表示 / {tasks.length}件中</span>
+            </div>
+          </div>
           <div className="header-actions">
             <button 
               className={`filter-toggle ${showFilters ? 'active' : ''} ${hasActiveFilters ? 'has-filters' : ''}`}
@@ -198,10 +204,6 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
         )}
         
         <div className="task-stats">
-          <div className="stat-chip total">
-            <Activity size={14} />
-            <span>{taskStats.total}件表示 / {tasks.length}件中</span>
-          </div>
           <button 
             className={`stat-chip pending clickable ${filters.status === 'pending' ? 'active' : ''}`}
             onClick={() => handleStatChipClick('pending')}
@@ -226,26 +228,33 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
             <CheckCircle size={14} />
             <span>{taskStats.completed} Completed</span>
           </button>
-          {taskStats.failed > 0 && (
-            <button 
-              className={`stat-chip failed clickable ${filters.status === 'failed' ? 'active' : ''}`}
-              onClick={() => handleStatChipClick('failed')}
-              title="失敗タスクでフィルター"
-            >
-              <AlertTriangle size={14} />
-              <span>{taskStats.failed} Failed</span>
-            </button>
-          )}
-          {taskStats.cancelled > 0 && (
-            <button 
-              className={`stat-chip cancelled clickable ${filters.status === 'cancelled' ? 'active' : ''}`}
-              onClick={() => handleStatChipClick('cancelled')}
-              title="キャンセル済みタスクでフィルター"
-            >
-              <StopCircle size={14} />
-              <span>{taskStats.cancelled} Cancelled</span>
-            </button>
-          )}
+          <button 
+            className={`stat-chip failed clickable ${filters.status === 'failed' ? 'active' : ''}`}
+            onClick={() => handleStatChipClick('failed')}
+            title="失敗タスクでフィルター"
+            style={{ opacity: taskStats.failed === 0 ? 0.5 : 1 }}
+          >
+            <AlertTriangle size={14} />
+            <span>{taskStats.failed} Failed</span>
+          </button>
+          <button 
+            className={`stat-chip paused clickable ${filters.status === 'paused' ? 'active' : ''}`}
+            onClick={() => handleStatChipClick('paused')}
+            title="一時停止中のタスクでフィルター (Usage Limit)"
+            style={{ opacity: taskStats.paused === 0 ? 0.5 : 1 }}
+          >
+            <Pause size={14} />
+            <span>{taskStats.paused} Paused</span>
+          </button>
+          <button 
+            className={`stat-chip cancelled clickable ${filters.status === 'cancelled' ? 'active' : ''}`}
+            onClick={() => handleStatChipClick('cancelled')}
+            title="キャンセル済みタスクでフィルター"
+            style={{ opacity: taskStats.cancelled === 0 ? 0.5 : 1 }}
+          >
+            <StopCircle size={14} />
+            <span>{taskStats.cancelled} Cancelled</span>
+          </button>
         </div>
       </div>
       
@@ -280,7 +289,7 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
                         {task.status === 'pending' && <AlertCircle size={14} />}
                         {task.status === 'in_progress' && <Clock size={14} />}
                         {task.status === 'completed' && <CheckCircle size={14} />}
-                        {task.status === 'paused' && <AlertCircle size={14} />}
+                        {task.status === 'paused' && <Pause size={14} />}
                         {task.status === 'failed' && <AlertTriangle size={14} />}
                         {task.status === 'cancelled' && <StopCircle size={14} />}
                         <span style={{ textTransform: 'capitalize' }}>{task.status.replace('_', ' ')}</span>
@@ -348,6 +357,7 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
                           width: task.status === 'completed' ? '100%' : 
                                  task.status === 'in_progress' ? '60%' : 
                                  task.status === 'failed' ? '100%' :
+                                 task.status === 'paused' ? '50%' :
                                  task.status === 'pending' ? '0%' : '30%'
                         }}
                       ></div>

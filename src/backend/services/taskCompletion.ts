@@ -101,9 +101,12 @@ export const startTaskCompletionMonitoring = (): NodeJS.Timeout => {
   isTaskCompletionCheckActive = true;
   console.log('🔍 Task completion monitoring started');
   
-  // 30 秒ごとにチェック
+  // 30 秒ごとにチェック（メモリリーク修正版）
+  // Note: このタイマーは外部の checkTaskCompletion に依存しているため、
+  // 代わりに server.ts の ServerManager で管理される
   const completionCheckInterval = setInterval(async () => {
     // checkTaskCompletion は外部から呼び出されるため、ここでは何もしない
+    // TODO: この設計を見直し、外部依存を減らす
   }, 30000);
   
   return completionCheckInterval;
