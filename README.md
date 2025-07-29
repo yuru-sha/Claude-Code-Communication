@@ -1,4 +1,5 @@
 # Claude Code Communication
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yuru-sha/Claude-Code-Communication)
 
 複数の AI エージェントが協力してタスクを実行するシステムです。
 
