@@ -325,6 +325,12 @@ export class Database {
     });
   }
 
+  // Usage Limit 状態をクリア
+  async clearUsageLimitState(): Promise<void> {
+    await this.prisma.usageLimitState.deleteMany({});
+    console.log('✅ Usage limit state cleared');
+  }
+
   // === App Settings 操作 ===
 
   // 設定値を取得

@@ -414,6 +414,56 @@ body {
   transform: scale(0.95);
 }
 
+.session-reset-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--error);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  margin-left: var(--space-xs);
+}
+
+.session-reset-button:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  transform: scale(1.05);
+}
+
+.session-reset-button:active {
+  transform: scale(0.95);
+}
+
+.usage-limit-clear-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: var(--radius-md);
+  color: var(--primary-light);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  margin-left: var(--space-xs);
+}
+
+.usage-limit-clear-button:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: scale(1.05);
+}
+
+.usage-limit-clear-button:active {
+  transform: scale(0.95);
+}
+
 .monitoring-toggle-button {
   display: flex;
   align-items: center;
@@ -499,7 +549,7 @@ body {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 320px 1fr 320px;
+  grid-template-columns: 300px 1fr;
   gap: var(--space-xl);
   min-height: calc(100vh - 140px);
   height: auto;
@@ -507,39 +557,20 @@ body {
   margin: 0 auto;
 }
 
-@media (max-width: 1400px) {
-  .dashboard-grid {
-    grid-template-columns: 280px 1fr 280px;
-  }
-}
-
 @media (max-width: 1200px) {
   .dashboard-grid {
     grid-template-columns: 280px 1fr;
-    grid-template-rows: 1fr auto;
-  }
-  
-  .dashboard-sidebar.right {
-    grid-column: 1 / -1;
-    max-height: 400px;
-    display: flex;
   }
 }
 
 @media (max-width: 1024px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto 1fr;
   }
   
   .dashboard-sidebar {
     max-height: none;
-  }
-  
-  .dashboard-sidebar.right {
-    order: 3;
-    max-height: 350px;
-    display: flex;
   }
 }
 
@@ -1039,9 +1070,10 @@ body {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(2, auto);
-  gap: var(--space-sm);
+  gap: var(--space-xs);
   max-width: 400px;
   min-width: 300px;
+  margin-bottom: var(--space-sm);
 }
 
 .task-stats .stat-chip.total {
@@ -1052,7 +1084,7 @@ body {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  padding: var(--space-xs) var(--space-sm);
+  padding: 6px var(--space-sm);
   border-radius: var(--radius-lg);
   white-space: nowrap;
   flex-shrink: 0;
@@ -1062,6 +1094,7 @@ body {
   border: none;
   background: inherit;
   color: inherit;
+  height: 28px;
 }
 
 .stat-chip.clickable {
@@ -1104,6 +1137,11 @@ body {
   color: var(--error);
 }
 
+.stat-chip.cancelled {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9CA3AF;
+}
+
 .task-pipeline {
   height: auto;
 }
@@ -1138,7 +1176,7 @@ body {
 .task-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-sm);
   padding-right: var(--space-sm);
 }
 
@@ -1146,7 +1184,7 @@ body {
   background: rgba(51, 65, 85, 0.3);
   border: 1px solid rgba(51, 65, 85, 0.5);
   border-radius: var(--radius-lg);
-  padding: var(--space-lg);
+  padding: var(--space-md);
   transition: all var(--transition-fast);
   position: relative;
 }
@@ -1176,6 +1214,11 @@ body {
 .task-card.failed {
   border-left: 4px solid var(--error);
   background: rgba(239, 68, 68, 0.05);
+}
+
+.task-card.cancelled {
+  border-left: 4px solid #6B7280;
+  background: rgba(107, 114, 128, 0.05);
 }
 
 .task-header {
@@ -1847,7 +1890,7 @@ body {
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
 .header-actions {
@@ -1921,8 +1964,8 @@ body {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
-  padding: var(--space-lg);
-  margin: var(--space-sm) 0 var(--space-md) 0;
+  padding: var(--space-md);
+  margin: var(--space-xs) 0 var(--space-sm) 0;
   animation: slideDown 0.2s ease-out;
   width: 100%;
   box-sizing: border-box;
@@ -1938,14 +1981,14 @@ body {
 .filter-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
+  gap: var(--space-xs);
 }
 
 .filter-label {
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: var(--space-xs);
+  margin-bottom: 2px;
 }
 
 .search-input-container {
@@ -2121,6 +2164,37 @@ body {
   gap: var(--space-sm);
 }
 
+.task-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: var(--radius-sm);
+  color: rgba(245, 158, 11, 0.7);
+  padding: var(--space-xs);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  opacity: 0.6;
+  margin-right: 4px;
+}
+
+.task-cancel-btn:hover {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #F59E0B;
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.task-cancel-btn:active {
+  transform: translateY(0);
+}
+
+.task-card:hover .task-cancel-btn {
+  opacity: 1;
+}
+
 .task-delete-btn {
   display: inline-flex;
   align-items: center;
@@ -2149,6 +2223,29 @@ body {
 
 .task-card:hover .task-delete-btn {
   opacity: 1;
+}
+
+.task-delete-btn.disabled,
+.task-delete-btn:disabled {
+  background: transparent;
+  border-color: rgba(156, 163, 175, 0.3);
+  color: rgba(156, 163, 175, 0.5);
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.task-delete-btn.disabled:hover,
+.task-delete-btn:disabled:hover {
+  background: transparent;
+  border-color: rgba(156, 163, 175, 0.3);
+  color: rgba(156, 163, 175, 0.5);
+  opacity: 0.4;
+  transform: none;
+}
+
+.task-card:hover .task-delete-btn.disabled,
+.task-card:hover .task-delete-btn:disabled {
+  opacity: 0.4;
 }
 
 /* ===== END: Task Pipeline Filters =====*/

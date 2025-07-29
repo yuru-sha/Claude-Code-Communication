@@ -404,6 +404,6 @@ ISC License
 
 ---
 
-**🚀 Enterprise AI Agent Orchestration Platform - Claude Code Communication**
+**🚀 AI Agent Orchestration Platform - Claude Code Communication**
 
 *複数の AI エージェントが協調的に働く、次世代の開発プラットフォームを体験してください！*

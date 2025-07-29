@@ -69,7 +69,7 @@ export const performAutoRecovery = async (
       if (!agent.active) {
         try {
           console.log(`🔧 Starting Claude Code for ${agent.name}...`);
-          await execAsync(`tmux send-keys -t "${agent.target}" 'claude --dangerously-skip-permissions' C-m`);
+          await execAsync(`tmux send-keys -t "${agent.target}" 'ENABLE_BACKGROUND_TASKS=1 claude --dangerously-skip-permissions' C-m`);
           console.log(`✅ Started Claude Code for ${agent.name}`);
           recoveryPerformed = true;
           

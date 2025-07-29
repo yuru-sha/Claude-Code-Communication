@@ -237,13 +237,16 @@ EOF
 
 ### 2. リアルタイム進捗管理
 ```bash
+TASK_ID=$(echo "$0" | grep -o 'cmd[a-z0-9]*' || echo "current-task")
+TASK_TMP_DIR="./tmp/${TASK_ID}"
+
 # ステータスダッシュボード作成
 cat > ./tmp/status.sh << 'EOF'
 #!/bin/bash
 echo "=== プロジェクトステータス $(date) ==="
-echo "Worker1: $([ -f ./tmp/worker1_done.txt ] && echo '✅ 完了' || echo '🔄 進行中')"
-echo "Worker2: $([ -f ./tmp/worker2_done.txt ] && echo '✅ 完了' || echo '🔄 進行中')"
-echo "Worker3: $([ -f ./tmp/worker3_done.txt ] && echo '✅ 完了' || echo '🔄 進行中')"
+echo "Worker1: $([ -f ${TASK_TMP_DIR}/worker1_done.txt ] && echo '✅ 完了' || echo '🔄 進行中')"
+echo "Worker2: $([ -f ${TASK_TMP_DIR}/worker2_done.txt ] && echo '✅ 完了' || echo '🔄 進行中')"
+echo "Worker3: $([ -f ${TASK_TMP_DIR}/worker3_done.txt ] && echo '✅ 完了' || echo '🔄 進行中')"
 EOF
 chmod +x ./tmp/status.sh
 
@@ -486,11 +489,14 @@ echo "□ PRESIDENT へ日報送信完了"
 ### フェーズ別進捗管理と次タスク自動割り当て
 
 ```bash
+TASK_ID=$(echo "$0" | grep -o 'cmd[a-z0-9]*' || echo "current-task")
+TASK_TMP_DIR="./tmp/${TASK_ID}"
+
 # 全タスク完了までのループ
 while [ "$PROJECT_COMPLETE" != "true" ]; do
     # 各 worker の状態チェック
     for worker in worker1 worker2 worker3; do
-        if [ -f "./tmp/${worker}_done.txt" ]; then
+        if [ -f "${TASK_TMP_DIR}/${worker}_done.txt" ]; then
             # 即座に次タスクを割り当て
             NEXT_TASK=$(get_next_task_for $worker)
             if [ -n "$NEXT_TASK" ]; then
@@ -503,7 +509,7 @@ while [ "$PROJECT_COMPLETE" != "true" ]; do
                 [詳細な指示...]
                 
                 引き続きお願いします！"
-                rm -f "./tmp/${worker}_done.txt"
+                rm -f "${TASK_TMP_DIR}/${worker}_done.txt"
             fi
         fi
     done

@@ -225,4 +225,33 @@ fi
 
 4. **ドキュメント最小化**
    - 必要最小限の記録のみ
-   - コードとテストで仕様を表現 
+   - コードとテストで仕様を表現
+
+## プロジェクト完了時の処理
+
+boss1 から「【プロジェクト完了報告】」の報告を受けた時は、以下の curl コマンドでタスクを完了にしてください：
+
+```bash
+# タスク完了 API 呼び出し
+curl -X POST http://localhost:3001/api/complete-task \
+  -H "Content-Type: application/json" \
+  -d '{"taskId": "[タスク ID]"}'
+
+# 推奨方法（HTTP API）
+```
+
+**使用例：**
+```bash
+# boss1 からの完了報告受信時
+./agent-send.sh system "タスク task-abc123 を完了ステータスに更新"
+
+# curl で完了処理
+curl -X POST http://localhost:3001/api/complete-task \
+  -H "Content-Type: application/json" \
+  -d '{"taskId": "task-abc123"}'
+```
+
+**重要：** 
+- boss1 の完了報告メッセージからタスク ID を抽出してください
+- 必ずタスク完了処理を実行してください
+- エラーが発生した場合は再試行してください 

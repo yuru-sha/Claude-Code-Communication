@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { Terminal, CheckCircle, RefreshCw, Activity, AlertCircle, Shield, ShieldAlert, ShieldOff } from 'lucide-react';
+import { Terminal, CheckCircle, RefreshCw, Activity, AlertCircle, Shield, ShieldAlert, ShieldOff, RotateCcw } from 'lucide-react';
 import { SystemHealth, TaskCompletionNotification } from '../../types';
 
 interface DashboardHeaderProps {
@@ -11,6 +11,8 @@ interface DashboardHeaderProps {
   isTaskCompletionMonitoringEnabled: boolean;
   onManualRecovery: () => void;
   onToggleTaskCompletionMonitoring: (enabled: boolean) => void;
+  onSessionReset: () => void;
+  onClearUsageLimit: () => void;
 }
 
 export const DashboardHeader = ({
@@ -21,7 +23,9 @@ export const DashboardHeader = ({
   taskCompletionNotifications,
   isTaskCompletionMonitoringEnabled,
   onManualRecovery,
-  onToggleTaskCompletionMonitoring
+  onToggleTaskCompletionMonitoring,
+  onSessionReset,
+  onClearUsageLimit
 }: DashboardHeaderProps) => {
   const handleManualRecovery = useCallback(() => {
     onManualRecovery();
@@ -30,6 +34,18 @@ export const DashboardHeader = ({
   const handleToggleMonitoring = useCallback((enabled: boolean) => {
     onToggleTaskCompletionMonitoring(enabled);
   }, [onToggleTaskCompletionMonitoring]);
+
+  const handleSessionReset = useCallback(() => {
+    if (confirm('開発環境をリセットしますか？\n\n 実行される処理：\n• tmux セッションを再構築\n• Claude Code エージェントを起動\n• 一時ファイルをクリア')) {
+      onSessionReset();
+    }
+  }, [onSessionReset]);
+
+  const handleClearUsageLimit = useCallback(() => {
+    if (confirm('Usage Limit 状態をクリアしますか？\n\n• 現在の利用制限状態をリセット\n• タスク処理を再開')) {
+      onClearUsageLimit();
+    }
+  }, [onClearUsageLimit]);
 
   return (
     <header className="dashboard-header">
@@ -40,7 +56,7 @@ export const DashboardHeader = ({
           </div>
           <div>
             <h1 className="brand-title">Claude Code Communication</h1>
-            <p className="brand-subtitle">Enterprise AI Agent Orchestration Platform</p>
+            <p className="brand-subtitle">AI Agent Orchestration Platform</p>
           </div>
         </div>
         <div className="header-actions">
@@ -108,6 +124,20 @@ export const DashboardHeader = ({
                     <RefreshCw size={14} />
                   </button>
                 )}
+                <button 
+                  className="session-reset-button"
+                  onClick={handleSessionReset}
+                  title="開発環境をリセット (tmux セッション再構築 + Claude Code 起動)"
+                >
+                  <RotateCcw size={14} />
+                </button>
+                <button 
+                  className="usage-limit-clear-button"
+                  onClick={handleClearUsageLimit}
+                  title="Usage Limit をクリア (タスク処理を再開)"
+                >
+                  <Activity size={14} />
+                </button>
               </div>
             </div>
           )}

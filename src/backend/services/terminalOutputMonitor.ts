@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import { ActivityInfo, ActivityType, ACTIVITY_DETECTION_CONFIG } from '../../types/index';
 import { activityPatterns } from './activityPatterns';
 import { TmuxError, logError, withErrorHandling, withRetry } from '../utils/errorHandler';
+import { detectUsageLimit, saveUsageLimitToDatabase } from './taskManager';
 
 const execAsync = promisify(exec);
 
@@ -282,6 +283,12 @@ export class TerminalOutputMonitor {
 
     // Optimize output processing with buffering
     const optimizedOutput = this.optimizeOutputProcessing(agent.name, currentOutput);
+
+    // Usage limit 検知をターミナル出力から実行
+    if (currentOutput && detectUsageLimit(currentOutput)) {
+      console.log(`🚨 Usage limit detected in terminal output for ${agent.name}: ${currentOutput.substring(0, 200)}...`);
+      await saveUsageLimitToDatabase(currentOutput);
+    }
 
     // Store current output for next comparison
     this.lastOutputs.set(agent.name, optimizedOutput);

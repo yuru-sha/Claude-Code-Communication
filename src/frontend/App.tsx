@@ -2,19 +2,21 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSocket } from './hooks/useSocket';
 import { Activity, Users, CheckCircle, Clock, AlertCircle, Terminal, Send, BarChart3, TrendingUp, X, RefreshCw, AlertTriangle, History, ChevronDown, ChevronUp, Heart, Shield, ShieldAlert, ShieldOff } from 'lucide-react';
 import { TaskPipeline } from './components/TaskPipeline';
+import { DashboardHeader } from './components/DashboardHeader';
 import './styles/dashboard.css';
 
 interface Task {
   id: string;
   title: string;
   description: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'paused' | 'failed';
+  status: 'pending' | 'in_progress' | 'completed' | 'paused' | 'failed' | 'cancelled';
   assignedTo?: string;
   projectName?: string;
   failureReason?: string;
   errorHistory?: string[];
   retryCount?: number;
   createdAt: Date;
+  cancelledAt?: Date;
 }
 
 interface Agent {
@@ -58,7 +60,6 @@ function App() {
   console.log('Current agents:', agents);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
-  const [terminalOutputs, setTerminalOutputs] = useState<Record<string, string>>({});
   const [expandedErrorHistory, setExpandedErrorHistory] = useState<Set<string>>(new Set());
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [autoRecoveryStatus, setAutoRecoveryStatus] = useState<string | null>(null);
@@ -69,7 +70,6 @@ function App() {
     timestamp: Date;
   }>>([]);
   const [isTaskCompletionMonitoringEnabled, setIsTaskCompletionMonitoringEnabled] = useState(true);
-  const [selectedAgent, setSelectedAgent] = useState<string | null>('president');
 
   useEffect(() => {
     if (!socket) return;
@@ -152,11 +152,15 @@ function App() {
       setTasks(prev => prev.map(t => t.id === task.id ? task : t));
     });
 
-    socket.on('task-deleted', (taskId: string) => {
-      console.log('🗑️ Task deleted:', taskId);
-      setTasks(prevTasks => 
-        prevTasks.filter(t => t.id !== taskId)
-      );
+    socket.on('task-deleted', (data: any) => {
+      console.log('🗑️ Task deleted event received:', data);
+      const taskId = typeof data === 'string' ? data : data.taskId;
+      console.log('🗑️ Filtering out task:', taskId);
+      setTasks(prevTasks => {
+        const newTasks = prevTasks.filter(t => t.id !== taskId);
+        console.log('🗑️ Tasks before filter:', prevTasks.length, 'after filter:', newTasks.length);
+        return newTasks;
+      });
     });
 
     socket.on('task-queue-updated', (update: any) => {
@@ -228,6 +232,51 @@ function App() {
       console.log('Task completion monitoring status:', data);
     });
 
+    socket.on('session-reset-completed', (data: any) => {
+      setAutoRecoveryStatus(`✅ セッションリセット完了: ${data.message}`);
+      console.log('Project reset completed:', data);
+      
+      // 5 秒後にステータスをクリア
+      setTimeout(() => {
+        setAutoRecoveryStatus(null);
+      }, 5000);
+    });
+
+    socket.on('session-reset-failed', (data: any) => {
+      setAutoRecoveryStatus(`❌ セッションリセット失敗: ${data.message}`);
+      console.error('Project reset failed:', data);
+      
+      // 10 秒後にステータスをクリア
+      setTimeout(() => {
+        setAutoRecoveryStatus(null);
+      }, 10000);
+    });
+
+    socket.on('usage-limit-cleared', (data: any) => {
+      setAutoRecoveryStatus(`✅ Usage Limit クリア完了: ${data.message}`);
+      console.log('Usage limit cleared:', data);
+      
+      // 5 秒後にステータスをクリア
+      setTimeout(() => {
+        setAutoRecoveryStatus(null);
+      }, 5000);
+    });
+
+    socket.on('usage-limit-clear-failed', (data: any) => {
+      setAutoRecoveryStatus(`❌ Usage Limit クリア失敗: ${data.message}`);
+      console.error('Usage limit clear failed:', data);
+      
+      // 10 秒後にステータスをクリア
+      setTimeout(() => {
+        setAutoRecoveryStatus(null);
+      }, 10000);
+    });
+
+    socket.on('task-delete-rejected', (data: any) => {
+      console.warn('Task delete rejected:', data);
+      alert(`タスクの削除が拒否されました：\n\n${data.message}\n\n タスク: ${data.taskTitle}\n 現在のステータス: ${data.currentStatus}`);
+    });
+
     return () => {
       socket.off('task-queued');
       socket.off('task-assigned');
@@ -244,96 +293,14 @@ function App() {
       socket.off('auto-recovery-failed');
       socket.off('task-completion-detected');
       socket.off('task-completion-monitoring-status');
+      socket.off('session-reset-completed');
+      socket.off('session-reset-failed');
+      socket.off('usage-limit-cleared');
+      socket.off('usage-limit-clear-failed');
+      socket.off('task-delete-rejected');
     };
   }, [socket]);
 
-  // Fetch terminal output for all agents (改善版)
-  useEffect(() => {
-    let isMounted = true;
-    let fetchController: AbortController | null = null;
-
-    const fetchTerminalOutput = async (agentId: string, signal?: AbortSignal) => {
-      try {
-        const response = await fetch(`http://localhost:3001/api/terminal/${agentId}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'text/plain',
-          },
-          signal,
-          // タイムアウトを追加
-          ...(window.fetch && { timeout: 8000 })
-        });
-        
-        if (!isMounted || signal?.aborted) return;
-        
-        if (response.ok) {
-          const text = await response.text();
-          if (isMounted) {
-            setTerminalOutputs(prev => ({ ...prev, [agentId]: text }));
-          }
-        } else {
-          if (isMounted) {
-            setTerminalOutputs(prev => ({ 
-              ...prev, 
-              [agentId]: `Error: Unable to fetch terminal output (${response.status})` 
-            }));
-          }
-        }
-      } catch (error) {
-        if (!isMounted || signal?.aborted) return;
-        
-        setTerminalOutputs(prev => ({ 
-          ...prev, 
-          [agentId]: `Network Error: ${error instanceof Error ? error.message : 'Unknown error'}` 
-        }));
-      }
-    };
-
-    const fetchAllTerminalOutputs = async () => {
-      if (!isMounted) return;
-      
-      // 前回のリクエストをキャンセル
-      if (fetchController) {
-        fetchController.abort();
-      }
-      
-      fetchController = new AbortController();
-      const signal = fetchController.signal;
-
-      try {
-        // 選択されたエージェントを優先的に更新
-        if (selectedAgent) {
-          await fetchTerminalOutput(selectedAgent, signal);
-        }
-        
-        // その他のエージェントを並列で更新（遅延なし）
-        const otherAgents = agents.filter(agent => agent.id !== selectedAgent);
-        const fetchPromises = otherAgents.map(agent => 
-          fetchTerminalOutput(agent.id, signal)
-        );
-        
-        await Promise.allSettled(fetchPromises);
-      } catch (error) {
-        if (!signal.aborted) {
-          console.warn('Terminal fetch error:', error);
-        }
-      }
-    };
-
-    // 初回実行
-    fetchAllTerminalOutputs();
-    
-    // 間隔を 8 秒に延長（負荷軽減）
-    const interval = setInterval(fetchAllTerminalOutputs, 8000);
-
-    return () => {
-      isMounted = false;
-      if (fetchController) {
-        fetchController.abort();
-      }
-      clearInterval(interval);
-    };
-  }, [agents, selectedAgent]);
 
   const handleSubmitTask = useCallback(() => {
     if (socket && newTaskTitle.trim()) {
@@ -361,9 +328,19 @@ function App() {
     }
   }, [socket]);
 
-  const handleDeleteTask = useCallback((taskId: string) => {
+  const handleCancelTask = useCallback((taskId: string) => {
     if (socket) {
+      socket.emit('cancel-task', taskId);
+    }
+  }, [socket]);
+
+  const handleDeleteTask = useCallback((taskId: string) => {
+    console.log('🗑️ handleDeleteTask called:', taskId);
+    if (socket) {
+      console.log('🗑️ Emitting delete-task event:', taskId);
       socket.emit('delete-task', taskId);
+    } else {
+      console.error('🗑️ Socket not available for delete task');
     }
   }, [socket]);
 
@@ -377,6 +354,20 @@ function App() {
   const handleToggleTaskCompletionMonitoring = useCallback((enabled: boolean) => {
     if (socket) {
       socket.emit('toggle-task-completion-monitoring', enabled);
+    }
+  }, [socket]);
+
+  const handleSessionReset = useCallback(() => {
+    if (socket) {
+      socket.emit('session-reset');
+      setAutoRecoveryStatus('🔄 開発環境リセット中...');
+    }
+  }, [socket]);
+
+  const handleClearUsageLimit = useCallback(() => {
+    if (socket) {
+      socket.emit('clear-usage-limit');
+      setAutoRecoveryStatus('🔄 Usage Limit クリア中...');
     }
   }, [socket]);
 
@@ -421,93 +412,18 @@ function App() {
 
   return (
     <div className="dashboard-container">
-      {/* Header */}
-      <header className="dashboard-header">
-        <div className="header-content">
-          <div className="header-brand">
-            <div className="brand-icon">
-              <Terminal size={24} />
-            </div>
-            <div>
-              <h1 className="brand-title">Claude Code Communication</h1>
-              <p className="brand-subtitle">Enterprise AI Agent Orchestration Platform</p>
-            </div>
-          </div>
-          <div className="header-actions">
-            {taskCompletionNotifications.length > 0 && (
-              <div className="task-completion-notifications">
-                {taskCompletionNotifications.map((notification) => (
-                  <div key={notification.id} className="completion-notification">
-                    <div className="completion-icon">
-                      <CheckCircle size={16} />
-                    </div>
-                    <div className="completion-details">
-                      <span className="completion-title">🎯 自動完了検知</span>
-                      <span className="completion-task">{notification.taskTitle}</span>
-                      <span className="completion-agent">by {notification.detectedBy}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {autoRecoveryStatus && (
-              <div className="auto-recovery-status">
-                <div className="recovery-icon">
-                  <RefreshCw size={16} className={autoRecoveryStatus.startsWith('🔧') ? 'spinning' : ''} />
-                </div>
-                <span className="recovery-message">{autoRecoveryStatus}</span>
-              </div>
-            )}
-            {systemHealth && (
-              <div className={`system-health-status ${systemHealth.overallHealth}`}>
-                <div className="health-icon">
-                  {systemHealth.overallHealth === 'healthy' && <Shield size={20} />}
-                  {systemHealth.overallHealth === 'degraded' && <ShieldAlert size={20} />}
-                  {systemHealth.overallHealth === 'critical' && <ShieldOff size={20} />}
-                </div>
-                <div className="health-details">
-                  <span className="health-label">System Health</span>
-                  <span className="health-value">{systemHealth.overallHealth}</span>
-                </div>
-                <div className="health-indicators">
-                  <div className={`indicator ${systemHealth.tmuxSessions.president && systemHealth.tmuxSessions.multiagent ? 'active' : 'inactive'}`} title="tmux sessions">
-                    <div className="indicator-dot"></div>
-                    <span>tmux</span>
-                  </div>
-                  <div className={`indicator ${Object.values(systemHealth.claudeAgents).filter(Boolean).length === 5 ? 'active' : 'inactive'}`} title={`Claude agents: ${Object.values(systemHealth.claudeAgents).filter(Boolean).length}/5`}>
-                    <div className="indicator-dot"></div>
-                    <span>Claude</span>
-                  </div>
-                  <div className={`indicator ${isTaskCompletionMonitoringEnabled ? 'active' : 'inactive'}`} title={`Task completion monitoring: ${isTaskCompletionMonitoringEnabled ? 'enabled' : 'disabled'}`}>
-                    <div className="indicator-dot"></div>
-                    <span>Monitor</span>
-                  </div>
-                  <button 
-                    className={`monitoring-toggle-button ${isTaskCompletionMonitoringEnabled ? 'enabled' : 'disabled'}`}
-                    onClick={() => handleToggleTaskCompletionMonitoring(!isTaskCompletionMonitoringEnabled)}
-                    title={`タスク完了監視を${isTaskCompletionMonitoringEnabled ? '無効' : '有効'}にする`}
-                  >
-                    {isTaskCompletionMonitoringEnabled ? <Activity size={14} /> : <AlertCircle size={14} />}
-                  </button>
-                  {(systemHealth.overallHealth === 'critical' || systemHealth.overallHealth === 'degraded') && !autoRecoveryStatus && (
-                    <button 
-                      className="manual-recovery-button"
-                      onClick={handleManualRecovery}
-                      title="手動復旧を実行"
-                    >
-                      <RefreshCw size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            <div className="connection-status">
-              <div className={`status-dot ${socket?.connected ? 'connected' : 'disconnected'}`}></div>
-              <span>{socket?.connected ? 'System Online' : 'System Offline'}</span>
-            </div>
-          </div>
-        </div>
-      </header>
+      <DashboardHeader
+        isConnected={socket?.connected || false}
+        connectionError={connectionError}
+        systemHealth={systemHealth}
+        autoRecoveryStatus={autoRecoveryStatus}
+        taskCompletionNotifications={taskCompletionNotifications}
+        isTaskCompletionMonitoringEnabled={isTaskCompletionMonitoringEnabled}
+        onManualRecovery={handleManualRecovery}
+        onToggleTaskCompletionMonitoring={handleToggleTaskCompletionMonitoring}
+        onSessionReset={handleSessionReset}
+        onClearUsageLimit={handleClearUsageLimit}
+      />
 
       {/* Main Dashboard */}
       <main className="dashboard-main">
@@ -676,69 +592,10 @@ function App() {
               onRetryTask={handleRetryTask}
               onMarkTaskFailed={handleMarkTaskFailed}
               onDeleteTask={handleDeleteTask}
+              onCancelTask={handleCancelTask}
             />
           </div>
 
-          {/* Right Panel - Terminal */}
-          <aside className="dashboard-sidebar right">
-            <div className="panel">
-              <div className="panel-header">
-                <h2 className="panel-title">
-                  <Terminal size={16} />
-                  Agent Terminals
-                </h2>
-                <div className="terminal-tabs">
-                  <div className="tab-row">
-                    {agents.filter(agent => ['president', 'boss1'].includes(agent.id)).map(agent => (
-                      <button
-                        key={agent.id}
-                        className={`terminal-tab ${selectedAgent === agent.id ? 'active' : ''}`}
-                        onClick={() => setSelectedAgent(agent.id)}
-                        title={agent.name}
-                      >
-                        <div className={`status-dot ${agent.status}`}></div>
-                        {agent.id === 'president' ? 'President' : 'Boss'}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="tab-row">
-                    {agents.filter(agent => agent.id.startsWith('worker')).map(agent => (
-                      <button
-                        key={agent.id}
-                        className={`terminal-tab ${selectedAgent === agent.id ? 'active' : ''}`}
-                        onClick={() => setSelectedAgent(agent.id)}
-                        title={agent.name}
-                      >
-                        <div className={`status-dot ${agent.status}`}></div>
-                        {agent.id.replace('worker', 'W')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="panel-content no-padding">
-                <div className="terminal-window">
-                  <div className="terminal-header">
-                    <div className="terminal-controls">
-                      <div className="control-dot red"></div>
-                      <div className="control-dot yellow"></div>
-                      <div className="control-dot green"></div>
-                    </div>
-                    <div className="terminal-title">
-                      {selectedAgent ? agents.find(a => a.id === selectedAgent)?.name : 'Select Agent'}
-                    </div>
-                  </div>
-                  <div className="terminal-content">
-                    <pre className="terminal-output">
-{selectedAgent && terminalOutputs[selectedAgent] ? 
-  terminalOutputs[selectedAgent] : 
-  selectedAgent ? 'Loading terminal output...' : 'Select an agent to view terminal output'}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </aside>
         </div>
       </main>
     </div>

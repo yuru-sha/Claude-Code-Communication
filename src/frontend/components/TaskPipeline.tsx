@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Activity, AlertCircle, Clock, CheckCircle, X, AlertTriangle, RefreshCw, History, ChevronDown, ChevronUp, Search, Filter, RotateCcw, Download, FileText, Database, Globe, Trash2 } from 'lucide-react';
+import { Activity, AlertCircle, Clock, CheckCircle, X, AlertTriangle, RefreshCw, History, ChevronDown, ChevronUp, Search, Filter, RotateCcw, Download, FileText, Database, Globe, Trash2, StopCircle } from 'lucide-react';
 import { Task } from '../../types';
 import { downloadProjectAsZip } from '../utils/projectDownloadUtils';
 
@@ -8,14 +8,15 @@ interface TaskPipelineProps {
   onRetryTask: (taskId: string) => void;
   onMarkTaskFailed: (taskId: string, reason: string) => void;
   onDeleteTask: (taskId: string) => void;
+  onCancelTask: (taskId: string) => void;
 }
 
-export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTask }: TaskPipelineProps) => {
+export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTask, onCancelTask }: TaskPipelineProps) => {
   const [expandedErrorHistory, setExpandedErrorHistory] = useState<Set<string>>(new Set());
   
   // フィルター状態管理
   const [filters, setFilters] = useState({
-    status: 'all' as 'all' | 'pending' | 'in_progress' | 'completed' | 'failed' | 'paused',
+    status: 'all' as 'all' | 'pending' | 'in_progress' | 'completed' | 'failed' | 'paused' | 'cancelled',
     project: 'all' as string,
     search: ''
   });
@@ -49,7 +50,8 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
     inProgress: filteredTasks.filter(t => t.status === 'in_progress').length,
     completed: filteredTasks.filter(t => t.status === 'completed').length,
     paused: filteredTasks.filter(t => t.status === 'paused').length,
-    failed: filteredTasks.filter(t => t.status === 'failed').length
+    failed: filteredTasks.filter(t => t.status === 'failed').length,
+    cancelled: filteredTasks.filter(t => t.status === 'cancelled').length
   }), [filteredTasks]);
 
   const toggleErrorHistory = useCallback((taskId: string) => {
@@ -96,11 +98,21 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
     }
   }, []);
 
+  // タスクキャンセル機能
+  const handleCancelTaskClick = useCallback((taskId: string, taskTitle: string) => {
+    if (confirm(`タスク「${taskTitle}」をキャンセルしますか？\n\n※実行中の作業は中断され、タスクは削除されます。`)) {
+      onCancelTask(taskId);
+    }
+  }, [onCancelTask]);
+
   // タスク削除機能
   const handleDeleteTaskClick = useCallback((taskId: string, taskTitle: string, projectName?: string) => {
+    console.log('🗑️ Delete task clicked:', { taskId, taskTitle, projectName });
     const projectWarning = projectName ? `\n※ workspace/${projectName} ディレクトリも削除されます。` : '';
     const confirmDelete = window.confirm(`タスク「${taskTitle}」を削除しますか？${projectWarning}\n\n この操作は取り消せません。本当に削除してもよろしいですか？`);
+    console.log('🗑️ Delete confirmed:', confirmDelete);
     if (confirmDelete) {
+      console.log('🗑️ Calling onDeleteTask:', taskId);
       onDeleteTask(taskId);
     }
   }, [onDeleteTask]);
@@ -120,6 +132,7 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
       case 'completed': return 'status-completed';
       case 'paused': return 'status-paused';
       case 'failed': return 'status-failed';
+      case 'cancelled': return 'status-cancelled';
       default: return '';
     }
   };
@@ -211,7 +224,7 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
             title="完了タスクでフィルター"
           >
             <CheckCircle size={14} />
-            <span>{taskStats.completed} Done</span>
+            <span>{taskStats.completed} Completed</span>
           </button>
           {taskStats.failed > 0 && (
             <button 
@@ -221,6 +234,16 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
             >
               <AlertTriangle size={14} />
               <span>{taskStats.failed} Failed</span>
+            </button>
+          )}
+          {taskStats.cancelled > 0 && (
+            <button 
+              className={`stat-chip cancelled clickable ${filters.status === 'cancelled' ? 'active' : ''}`}
+              onClick={() => handleStatChipClick('cancelled')}
+              title="キャンセル済みタスクでフィルター"
+            >
+              <StopCircle size={14} />
+              <span>{taskStats.cancelled} Cancelled</span>
             </button>
           )}
         </div>
@@ -259,12 +282,27 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
                         {task.status === 'completed' && <CheckCircle size={14} />}
                         {task.status === 'paused' && <AlertCircle size={14} />}
                         {task.status === 'failed' && <AlertTriangle size={14} />}
+                        {task.status === 'cancelled' && <StopCircle size={14} />}
                         <span style={{ textTransform: 'capitalize' }}>{task.status.replace('_', ' ')}</span>
                       </div>
+                      {(task.status === 'pending' || task.status === 'in_progress') && (
+                        <button
+                          className="task-cancel-btn"
+                          onClick={() => handleCancelTaskClick(task.id, task.title)}
+                          title="タスクをキャンセル"
+                        >
+                          <StopCircle size={14} />
+                        </button>
+                      )}
                       <button
-                        className="task-delete-btn"
+                        className={`task-delete-btn ${task.status === 'in_progress' || task.status === 'paused' ? 'disabled' : ''}`}
                         onClick={() => handleDeleteTaskClick(task.id, task.title, task.projectName)}
-                        title="タスクを削除"
+                        disabled={task.status === 'in_progress' || task.status === 'paused'}
+                        title={
+                          task.status === 'in_progress' || task.status === 'paused'
+                            ? `実行中または一時停止中のタスクは削除できません (現在: ${task.status})`
+                            : 'タスクを削除'
+                        }
                       >
                         <Trash2 size={14} />
                       </button>
@@ -288,11 +326,11 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
                       <div className="meta-item">
                         <span className="meta-label">Project:</span>
                         <span className="meta-value">workspace/{task.projectName}</span>
-                        {task.status === 'completed' && (
+                        {(task.status === 'completed' || task.status === 'cancelled') && (
                           <button
                             className="download-project-btn"
                             onClick={() => handleProjectDownload(task.projectName!)}
-                            title="プロジェクトをダウンロード"
+                            title="プロジェクトをダウンロード（途中まで作成された成果物）"
                           >
                             <Download size={14} />
                           </button>
