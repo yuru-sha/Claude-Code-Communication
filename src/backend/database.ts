@@ -105,10 +105,32 @@ export class Database {
   async initialize(): Promise<void> {
     try {
       await this.prisma.$connect();
-      console.log('🗄️ Database connected successfully');
+      
+      // データベース健全性チェック
+      const isHealthy = await this.healthCheck();
+      if (!isHealthy) {
+        throw new Error('Database health check failed');
+      }
+      
+      // テーブルの存在確認とリカバリ処理
+      await this.ensureDatabaseIntegrity();
+      
+      // 空の Agent/Workspace フィールドを修復
+      await this.repairEmptyFields();
+      
+      console.log('🗄️ Database connected and verified successfully');
     } catch (error) {
       console.error('❌ Failed to connect to database:', error);
-      throw error;
+      
+      // データベースリカバリを試行
+      const recovered = await this.attemptDatabaseRecovery();
+      if (!recovered) {
+        throw error;
+      }
+      
+      console.log('🔧 Database recovery completed, retrying connection...');
+      await this.prisma.$connect();
+      console.log('🗄️ Database connected successfully after recovery');
     }
   }
 
@@ -503,6 +525,118 @@ export class Database {
     } catch (error) {
       console.error('Database health check failed:', error);
       return false;
+    }
+  }
+
+  // データベース整合性確認とリカバリ
+  async ensureDatabaseIntegrity(): Promise<void> {
+    try {
+      // テーブルの存在確認
+      await this.prisma.task.findFirst();
+      await this.prisma.usageLimitState.findFirst();
+      await this.prisma.appSettings.findFirst();
+      
+      console.log('✅ Database integrity verified - all tables accessible');
+    } catch (error) {
+      console.error('❌ Database integrity check failed:', error);
+      throw new Error('Database tables are not accessible');
+    }
+  }
+
+  // データベースリカバリ処理
+  async attemptDatabaseRecovery(): Promise<boolean> {
+    try {
+      console.log('🔧 Attempting database recovery...');
+      
+      // 1. Prisma スキーマに基づくマイグレーション実行
+      console.log('📝 Running Prisma migrations...');
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      try {
+        await execAsync('cd src && npx prisma db push --force-reset');
+        console.log('✅ Database schema reset and pushed successfully');
+      } catch (migrationError) {
+        console.error('❌ Migration failed:', migrationError);
+        return false;
+      }
+
+      // 2. 基本設定の初期化
+      await this.initializeDefaultSettings();
+      
+      // 3. 接続テスト
+      const isHealthy = await this.healthCheck();
+      if (!isHealthy) {
+        console.error('❌ Database still not healthy after recovery');
+        return false;
+      }
+
+      console.log('🎉 Database recovery completed successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Database recovery failed:', error);
+      return false;
+    }
+  }
+
+  // デフォルト設定の初期化
+  async initializeDefaultSettings(): Promise<void> {
+    try {
+      // タスク ID カウンターの初期化
+      await this.setSetting('task_id_counter', '1');
+      
+      // その他の基本設定があれば追加
+      console.log('✅ Default settings initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize default settings:', error);
+    }
+  }
+
+  // データベース修復処理（空のフィールドを修復）
+  async repairEmptyFields(): Promise<void> {
+    try {
+      console.log('🔧 Checking for tasks with empty Agent/Workspace fields...');
+      
+      const tasks = await this.getAllTasks();
+      let repairedCount = 0;
+      
+      for (const task of tasks) {
+        let needsUpdate = false;
+        const updates: Partial<Task> = {};
+        
+        // assignedTo が空で、status が in_progress または completed の場合
+        if (!task.assignedTo && (task.status === 'in_progress' || task.status === 'completed')) {
+          updates.assignedTo = 'president'; // デフォルトで president に割り当て
+          needsUpdate = true;
+          console.log(`🔧 Repairing assignedTo for task: ${task.title}`);
+        }
+        
+        // projectName が空で、status が in_progress または completed の場合
+        if (!task.projectName && (task.status === 'in_progress' || task.status === 'completed')) {
+          // タイトルからプロジェクト名を生成
+          const projectName = task.title.toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/[^a-z0-9-]/g, '')
+            .substring(0, 30);
+          updates.projectName = projectName;
+          needsUpdate = true;
+          console.log(`🔧 Repairing projectName for task: ${task.title} -> ${projectName}`);
+        }
+        
+        if (needsUpdate) {
+          await this.updateTask(task.id, updates);
+          repairedCount++;
+        }
+      }
+      
+      if (repairedCount > 0) {
+        console.log(`✅ Database repair completed: ${repairedCount} tasks repaired`);
+      } else {
+        console.log('✅ No repairs needed - all tasks have proper Agent/Workspace assignments');
+      }
+    } catch (error) {
+      console.error('❌ Database repair failed:', error);
     }
   }
 }

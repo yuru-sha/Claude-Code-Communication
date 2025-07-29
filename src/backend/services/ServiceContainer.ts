@@ -8,6 +8,7 @@ import { ActivityAnalyzer } from './activityAnalyzer';
 import { TmuxManager } from './tmuxManager';
 import { AgentActivityMonitoringService } from './agentActivityMonitoringService';
 import { PerformanceMonitor } from './performanceMonitor';
+import { AgentProcessManager } from './agentProcessManager';
 import { ACTIVITY_DETECTION_CONFIG } from '../../types';
 
 export interface IServiceContainer {
@@ -16,6 +17,7 @@ export interface IServiceContainer {
   tmuxManager: TmuxManager;
   agentActivityMonitoringService: AgentActivityMonitoringService;
   performanceMonitor: PerformanceMonitor;
+  agentProcessManager: AgentProcessManager;
 }
 
 export class ServiceContainer implements IServiceContainer {
@@ -26,6 +28,7 @@ export class ServiceContainer implements IServiceContainer {
   public readonly tmuxManager: TmuxManager;
   public readonly agentActivityMonitoringService: AgentActivityMonitoringService;
   public readonly performanceMonitor: PerformanceMonitor;
+  public readonly agentProcessManager: AgentProcessManager;
 
   private constructor() {
     // サービスの初期化順序に注意
@@ -33,6 +36,7 @@ export class ServiceContainer implements IServiceContainer {
     this.terminalOutputMonitor = new TerminalOutputMonitor();
     this.activityAnalyzer = new ActivityAnalyzer();
     this.performanceMonitor = new PerformanceMonitor();
+    this.agentProcessManager = new AgentProcessManager();
     
     // 依存関係を持つサービスは後で初期化
     this.agentActivityMonitoringService = new AgentActivityMonitoringService(

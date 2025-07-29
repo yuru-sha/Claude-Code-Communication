@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSocket } from './hooks/useSocket';
-import { Activity, Users, CheckCircle, Clock, AlertCircle, Terminal, Send, BarChart3, TrendingUp, X, RefreshCw, AlertTriangle, History, ChevronDown, ChevronUp, Heart, Shield, ShieldAlert, ShieldOff } from 'lucide-react';
+import { Activity, Users, CheckCircle, Clock, AlertCircle, Send, BarChart3, TrendingUp, X, RefreshCw, AlertTriangle, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { TaskPipeline } from './components/TaskPipeline';
 import { DashboardHeader } from './components/DashboardHeader';
 import { Task, Agent, SystemHealth } from '../types';
@@ -142,20 +142,12 @@ function App() {
 
     socket.on('auto-recovery-status', (data: any) => {
       setAutoRecoveryStatus(`✅ 自動復旧状況: ${data.message}`);
-      
-      // 5 秒後にステータスをクリア
-      setTimeout(() => {
-        setAutoRecoveryStatus(null);
-      }, 5000);
+      setAutoRecoveryStatusClear(5000);
     });
 
     socket.on('auto-recovery-failed', (data: any) => {
       setAutoRecoveryStatus(`❌ 自動復旧失敗: ${data.message}`);
-      
-      // 10 秒後にステータスをクリア
-      setTimeout(() => {
-        setAutoRecoveryStatus(null);
-      }, 10000);
+      setAutoRecoveryStatusClear(10000);
     });
 
     socket.on('task-completion-detected', (data: any) => {
@@ -204,6 +196,19 @@ function App() {
       alert(`タスクの削除が拒否されました：\n\n${data.message}\n\n タスク: ${data.taskTitle}\n 現在のステータス: ${data.currentStatus}`);
     });
 
+    socket.on('resume-paused-result', (data: any) => {
+      if (data.success) {
+        setAutoRecoveryStatus(`✅ ${data.resumedCount}個の Paused タスクを再開しました`);
+      } else {
+        setAutoRecoveryStatus(`❌ Paused タスク再開に失敗: ${data.message}`);
+      }
+    });
+
+    socket.on('paused-tasks-resumed', (data: any) => {
+      setAutoRecoveryStatus(`▶️ ${data.message}`);
+    });
+
+
     return () => {
       socket.off('task-queued');
       socket.off('task-assigned');
@@ -223,6 +228,8 @@ function App() {
       socket.off('session-reset-completed');
       socket.off('session-reset-failed');
       socket.off('task-delete-rejected');
+      socket.off('resume-paused-result');
+      socket.off('paused-tasks-resumed');
     };
   }, [socket]);
 
@@ -285,6 +292,12 @@ function App() {
     }
   }, [socket]);
 
+  const handleResumePausedTasks = useCallback(() => {
+    if (socket) {
+      socket.emit('resume-paused-tasks');
+      setAutoRecoveryStatus('▶️ Paused タスクを再開中...');
+    }
+  }, [socket]);
 
   const toggleErrorHistory = useCallback((taskId: string) => {
     setExpandedErrorHistory(prev => {
@@ -501,6 +514,7 @@ function App() {
               onMarkTaskFailed={handleMarkTaskFailed}
               onDeleteTask={handleDeleteTask}
               onCancelTask={handleCancelTask}
+              onResumePausedTasks={handleResumePausedTasks}
             />
           </div>
 

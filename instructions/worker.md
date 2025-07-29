@@ -45,7 +45,7 @@
 ### 2. 進捗報告フォーマット
 ```bash
 # 30 分ごとの進捗記録
-echo "[$(date +%H:%M)] タスク: [タスク名] - 進捗: [X]% - 状態: [順調/問題あり]" >> workspace/[プロジェクト名]/progress.log
+echo "[$(date +%H:%M)] タスク: [タスク名] - 進捗: [X]% - 状態: [順調/問題あり]" >> workspace/[タスク ID]/[プロジェクト名]/progress.log
 
 # 定型進捗報告
 ./agent-send.sh boss1 "【進捗報告】Worker[X] $(date +%H:%M)

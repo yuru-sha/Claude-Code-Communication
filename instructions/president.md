@@ -14,7 +14,13 @@
    - boss1 に明確な成果物と期限を指定
    - 成功基準を数値化（例：レスポンス時間 1 秒以内）
    - リスクと対策を事前に共有
-   - **作業ディレクトリを指定**: `workspace/[プロジェクト名]`
+   - **作業ディレクトリを指定**: `workspace/[タスク ID]/[プロジェクト名]`
+   - **タスク情報を更新**（以下の形式で出力）：
+     ```
+     【タスク ID】[タスク ID]
+     【プロジェクト名】[決定したプロジェクト名]
+     【担当エージェント】boss1
+     ```
 
 ## 実践的な要件分析手法
 ### クイック分析（3 分で完了）
@@ -243,12 +249,12 @@ curl -X POST http://localhost:3001/api/complete-task \
 **使用例：**
 ```bash
 # boss1 からの完了報告受信時
-./agent-send.sh system "タスク task-abc123 を完了ステータスに更新"
+./agent-send.sh system "タスク cmdabc123 を完了ステータスに更新"
 
 # curl で完了処理
 curl -X POST http://localhost:3001/api/complete-task \
   -H "Content-Type: application/json" \
-  -d '{"taskId": "task-abc123"}'
+  -d '{"taskId": "cmdabc123"}'
 ```
 
 **重要：** 

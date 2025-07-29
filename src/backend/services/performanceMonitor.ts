@@ -70,6 +70,8 @@ interface PerformanceThresholds {
  * Provides comprehensive performance monitoring and optimization for the agent status detection system
  */
 export class PerformanceMonitor {
+  private static instance: PerformanceMonitor;
+  
   private monitoringService: AgentActivityMonitoringService | null = null;
   private terminalMonitor: TerminalOutputMonitor | null = null;
   private activityAnalyzer: ActivityAnalyzer | null = null;
@@ -92,6 +94,29 @@ export class PerformanceMonitor {
 
   private startTime: Date = new Date();
   private lastOptimizationTime: Date = new Date();
+
+  // Private constructor to prevent direct instantiation
+  private constructor() {}
+
+  /**
+   * Get the singleton instance of PerformanceMonitor
+   */
+  public static getInstance(): PerformanceMonitor {
+    if (!PerformanceMonitor.instance) {
+      PerformanceMonitor.instance = new PerformanceMonitor();
+    }
+    return PerformanceMonitor.instance;
+  }
+
+  /**
+   * Reset the singleton instance (useful for testing)
+   */
+  public static resetInstance(): void {
+    if (PerformanceMonitor.instance) {
+      PerformanceMonitor.instance.stop();
+      PerformanceMonitor.instance = null as any;
+    }
+  }
 
   /**
    * Initialize performance monitoring

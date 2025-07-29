@@ -6,13 +6,13 @@
 ## 作業ディレクトリ管理
 ### プロジェクトごとの共通作業場所
 - **ルート**: `workspace/`
-- **プロジェクトディレクトリ**: `workspace/[プロジェクト名]`
-- **命名規則**: 英数字とハイフン（例: `ecommerce-site`, `todo-app`）
+- **プロジェクトディレクトリ**: `workspace/[タスク ID]/[プロジェクト名]`
+- **命名規則**: cmd[英数字]/プロジェクト名（例: `cmd1a2b3c/ecommerce-site`, `cmd4d5e6f/todo-app`）
 - **重要**: 全 worker が同じディレクトリで作業することで、ファイルの共有と統合が容易になります
 
 ### ディレクトリ構造例
 ```
-workspace/ecommerce-site/
+workspace/cmd1a2b3c/ecommerce-site/
 ├── components/     # Worker1: フロントエンド
 ├── api/           # Worker2: バックエンド
 ├── infrastructure/ # Worker3: インフラ
@@ -30,7 +30,7 @@ workspace/ecommerce-site/
 ### マスタータスクリスト管理
 ```bash
 # プロジェクト開始時に作成
-cat > workspace/[プロジェクト名]/MASTER_TASKS.md << 'EOF'
+cat > workspace/[タスク ID]/[プロジェクト名]/MASTER_TASKS.md << 'EOF'
 # プロジェクト: [プロジェクト名]
 ## 目標: [PRESIDENT の要求]
 
@@ -84,15 +84,15 @@ EOF
 # Worker1（フロントエンド担当）
 ./agent-send.sh worker1 "あなたは worker1 です。
 
-【作業ディレクトリ】workspace/[プロジェクト名]
+【作業ディレクトリ】workspace/[タスク ID]/[プロジェクト名]
 ※必ずこのディレクトリで作業してください。存在しない場合は作成してください。
 
 【タスク】[UI コンポーネント名]の実装
 【納期】[YYYY/MM/DD HH:MM]
 【成果物】
-- workspace/[プロジェクト名]/components/ファイル名.jsx
-- workspace/[プロジェクト名]/tests/[テストファイル]
-- workspace/[プロジェクト名]/stories/[Storybook 設定]
+- workspace/[タスク ID]/[プロジェクト名]/components/ファイル名.jsx
+- workspace/[タスク ID]/[プロジェクト名]/tests/[テストファイル]
+- workspace/[タスク ID]/[プロジェクト名]/stories/[Storybook 設定]
 
 【要件】
 - レスポンシブ対応
@@ -116,15 +116,15 @@ EOF
 # Worker2（バックエンド担当）
 ./agent-send.sh worker2 "あなたは worker2 です。
 
-【作業ディレクトリ】workspace/[プロジェクト名]
+【作業ディレクトリ】workspace/[タスク ID]/[プロジェクト名]
 ※必ずこのディレクトリで作業してください。存在しない場合は作成してください。
 
 【タスク】[API エンドポイント名]の API 実装
 【納期】[YYYY/MM/DD HH:MM]
 【成果物】
-- workspace/[プロジェクト名]/api/v1/エンドポイント名
-- workspace/[プロジェクト名]/docs/openapi.yaml
-- workspace/[プロジェクト名]/tests/integration/[テストファイル]
+- workspace/[タスク ID]/[プロジェクト名]/api/v1/エンドポイント名
+- workspace/[タスク ID]/[プロジェクト名]/docs/openapi.yaml
+- workspace/[タスク ID]/[プロジェクト名]/tests/integration/[テストファイル]
 
 【要件】
 - RESTful API
@@ -146,16 +146,16 @@ JWT トークン必須
 # Worker3（インフラ/DevOps 担当）  
 ./agent-send.sh worker3 "あなたは worker3 です。
 
-【作業ディレクトリ】workspace/[プロジェクト名]
+【作業ディレクトリ】workspace/[タスク ID]/[プロジェクト名]
 ※必ずこのディレクトリで作業してください。存在しない場合は作成してください。
 
 【タスク】CI/CD パイプライン構築
 【納期】[YYYY/MM/DD HH:MM]
 【成果物】
-- workspace/[プロジェクト名]/.github/workflows/deploy.yml
-- workspace/[プロジェクト名]/Dockerfile
-- workspace/[プロジェクト名]/docker-compose.yml
-- workspace/[プロジェクト名]/scripts/deploy.sh
+- workspace/[タスク ID]/[プロジェクト名]/.github/workflows/deploy.yml
+- workspace/[タスク ID]/[プロジェクト名]/Dockerfile
+- workspace/[タスク ID]/[プロジェクト名]/docker-compose.yml
+- workspace/[タスク ID]/[プロジェクト名]/scripts/deploy.sh
 
 【要件】
 - 自動テスト実行
@@ -181,7 +181,7 @@ JWT トークン必須
 WORKER_NAME=$1  # 報告してきた worker 名
 
 # 1. 完了タスクをマスターリストで更新
-echo "✅ $WORKER_NAME: [完了タスク名] - $(date)" >> workspace/[プロジェクト名]/progress.log
+echo "✅ $WORKER_NAME: [完了タスク名] - $(date)" >> workspace/[タスク ID]/[プロジェクト名]/progress.log
 
 # 2. 次のタスクを即座に割り当て
 ./agent-send.sh $WORKER_NAME "【次タスク割り当て】
@@ -212,7 +212,7 @@ echo "✅ $WORKER_NAME: [完了タスク名] - $(date)" >> workspace/[プロジ�
 ### 並行タスク管理表
 ```bash
 # 各 worker の現在タスクと次の 3 タスクを常に準備
-cat > workspace/[プロジェクト名]/TASK_QUEUE.md << 'EOF'
+cat > workspace/[タスク ID]/[プロジェクト名]/TASK_QUEUE.md << 'EOF'
 # タスクキュー管理表
 
 ## Worker1 (フロントエンド)
@@ -281,7 +281,7 @@ done &
 総合進捗: 6/23 タスク (26%) ↑
 
 【次のタスク：ダッシュボード UI】
-作業ディレクトリ: workspace/[プロジェクト名]
+作業ディレクトリ: workspace/[タスク ID]/[プロジェクト名]
 
 詳細:
 - メインダッシュボードコンポーネント作成
@@ -290,9 +290,9 @@ done &
 - リアルタイム更新機能
 
 成果物:
-- workspace/[プロジェクト名]/components/Dashboard.tsx
-- workspace/[プロジェクト名]/components/Dashboard.test.tsx
-- workspace/[プロジェクト名]/styles/dashboard.css
+- workspace/[タスク ID]/[プロジェクト名]/components/Dashboard.tsx
+- workspace/[タスク ID]/[プロジェクト名]/components/Dashboard.test.tsx
+- workspace/[タスク ID]/[プロジェクト名]/styles/dashboard.css
 
 【Worker2 の進捗共有】
 Worker2 は認証 API を 80% 完了。あと 30 分で完了予定なので、

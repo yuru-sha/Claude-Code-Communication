@@ -95,7 +95,7 @@ temp/
 /src/generated/
 
 # Claude Code settings
-.claude/settings.local.json
+#.claude/settings.local.json
 
 # Test and report files
 *-reports/

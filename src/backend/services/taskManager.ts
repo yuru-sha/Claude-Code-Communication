@@ -1,5 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs/promises';
+import * as fsWatch from 'fs';
 import path from 'path';
 import { db, Task, UsageLimitState } from '../database';
 
@@ -7,6 +9,85 @@ const execAsync = promisify(exec);
 
 // エージェント状態のメモリトラッキング
 export let agentStatusCache: Record<string, { status: 'idle' | 'working' | 'offline', currentTask?: string, lastUpdate: Date }> = {};
+
+// workspace ディレクトリのウォッチャー
+let workspaceWatcher: fsWatch.FSWatcher | null = null;
+
+// workspace 監視開始
+export const startWorkspaceWatcher = async () => {
+  const workspacePath = path.join(process.cwd(), 'workspace');
+  
+  try {
+    // workspace ディレクトリが存在しない場合は作成
+    await fs.mkdir(workspacePath, { recursive: true });
+    
+    if (workspaceWatcher) {
+      workspaceWatcher.close();
+    }
+    
+    workspaceWatcher = fsWatch.watch(workspacePath, { recursive: false }, async (eventType, filename) => {
+      if (eventType === 'rename' && filename) {
+        // 新しいディレクトリが作成された可能性
+        const newDirPath = path.join(workspacePath, filename);
+        
+        try {
+          const stats = await fs.stat(newDirPath);
+          if (stats.isDirectory() && !filename.startsWith('.')) {
+            console.log(`📁 新しいプロジェクトディレクトリを検出: ${filename}`);
+            
+            // 進行中のタスクで projectName が未設定のものを探して更新
+            await updateTaskProjectName(filename);
+          }
+        } catch (error) {
+          // ディレクトリが削除された場合など、エラーは無視
+        }
+      }
+    });
+    
+    console.log('🔍 workspace 監視を開始しました');
+  } catch (error) {
+    console.error('workspace 監視の開始に失敗:', error);
+  }
+};
+
+// タスクの projectName を更新
+const updateTaskProjectName = async (projectName: string) => {
+  try {
+    // 進行中のタスクで projectName が未設定のものを取得
+    const tasksToUpdate = await db.task.findMany({
+      where: {
+        status: 'in_progress',
+        projectName: null
+      },
+      orderBy: {
+        updatedAt: 'desc'
+      }
+    });
+    
+    if (tasksToUpdate.length > 0) {
+      // 最新のタスクに projectName を設定
+      const latestTask = tasksToUpdate[0];
+      
+      await db.task.update({
+        where: { id: latestTask.id },
+        data: { projectName }
+      });
+      
+      console.log(`✅ タスク "${latestTask.title}" にプロジェクト名 "${projectName}" を自動設定しました`);
+    }
+  } catch (error) {
+    console.error('projectName 更新エラー:', error);
+  }
+};
+
+// workspace 監視停止
+export const stopWorkspaceWatcher = () => {
+  if (workspaceWatcher) {
+    workspaceWatcher.close();
+    workspaceWatcher = null;
+    console.log('🔍 workspace 監視を停止しました');
+  }
+};
 
 // Usage limit 検知関数
 export const detectUsageLimit = (errorMessage: string): boolean => {
@@ -263,23 +344,19 @@ export const assignTaskToPresident = async (
     console.error('❌ タスク専用 tmp ディレクトリ作成エラー:', error);
   }
   
-  // 全エージェントのコンテキストをリセット
-  const agents = ['president', 'boss1', 'worker1', 'worker2', 'worker3'];
-  console.log('🧹 新タスク開始: 全エージェントのコンテキストをリセット中...');
+  // President のみコンテキストをリセット（Workers は実行中タスクがある可能性）
+  console.log('🧹 新タスク開始: President のコンテキストをリセット中...');
   
-  for (const agent of agents) {
-    try {
-      await sendToAgentFn(agent, '/clear');
-      console.log(`✅ ${agent}のコンテキストリセット完了`);
-      await new Promise(resolve => setTimeout(resolve, 300));
-    } catch (error) {
-      console.error(`❌ ${agent}のコンテキストリセット失敗:`, error);
-    }
+  try {
+    await sendToAgentFn('president', '/clear');
+    console.log(`✅ president のコンテキストリセット完了`);
+    // President のリセット完了を待機
+    await new Promise(resolve => setTimeout(resolve, 500));
+  } catch (error) {
+    console.error(`❌ president のコンテキストリセット失敗:`, error);
   }
   
-  // リセット完了後、少し待機
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  console.log('✅ 全エージェントのコンテキストリセット完了');
+  console.log('✅ President コンテキストリセット完了');
   
   const presidentMessage = `あなたは president です。
 

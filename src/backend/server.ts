@@ -13,7 +13,9 @@ import {
   sendToAgent, 
   checkUsageLimitResolution, 
   processTaskQueue,
-  assignTaskToPresident as taskManagerAssignTaskToPresident
+  assignTaskToPresident as taskManagerAssignTaskToPresident,
+  startWorkspaceWatcher,
+  stopWorkspaceWatcher
 } from './services/taskManager';
 import { serverManager } from './utils/ServerManager';
 
@@ -43,6 +45,7 @@ const terminalMonitor = serviceContainer.terminalOutputMonitor;
 const activityAnalyzer = serviceContainer.activityAnalyzer;
 const tmuxManager = serviceContainer.tmuxManager;
 const agentActivityMonitoringService = serviceContainer.agentActivityMonitoringService;
+const agentProcessManager = serviceContainer.agentProcessManager;
 
 // Adaptive check intervals based on agent activity
 let currentCheckInterval: number = ACTIVITY_DETECTION_CONFIG.IDLE_CHECK_INTERVAL;
@@ -1065,20 +1068,26 @@ const handleUsageLimitResolved = async (data: any) => {
     
     console.log(`🔄 Usage limit resolved. Resuming ${pausedTasks.length} paused tasks...`);
     
-    // データベースでタスクを pending に戻す
+    // データベースでタスクを in_progress に戻す（assignedTo を保持）
     for (const task of pausedTasks) {
       await db.updateTask(task.id, { 
-        status: 'pending',
+        status: 'in_progress',
         pausedReason: undefined 
+        // assignedTo は保持（削除しない）
       });
-      console.log(`▶️ Task resumed from pause: ${task.title} (ID: ${task.id})`);
+      console.log(`▶️ Task resumed from pause: ${task.title} (ID: ${task.id}) - Agent: ${task.assignedTo}`);
     }
     
-    // メモリキューも更新
+    // メモリキューも更新（assignedTo を保持）
     pausedTasks.forEach(task => {
       const index = taskQueue.findIndex(t => t.id === task.id);
       if (index !== -1) {
-        taskQueue[index] = { ...taskQueue[index], status: 'pending', pausedReason: undefined };
+        taskQueue[index] = { 
+          ...taskQueue[index], 
+          status: 'in_progress', 
+          pausedReason: undefined 
+          // assignedTo は保持（元のタスクから継承）
+        };
       }
     });
 
@@ -1239,12 +1248,18 @@ const handleTaskAssigned = (task: Task) => {
   });
 };
 
-// プロジェクト完了時の専用クリーンアップ（/clear 送信）
+// プロジェクト完了時の専用クリーンアップ（/clear + tmp 削除）
 const performProjectCompletionCleanup = async (): Promise<void> => {
   try {
     console.log('🎉 Performing project completion cleanup...');
 
-    // Claude Code に /clear を送信してセッションをクリア（tmux 作法に従って）
+    // 1. tmp ディレクトリをクリーンアップ（プロジェクト完了時のみ）
+    console.log('🗑️ Cleaning tmp directory (project completed)...');
+    await execAsync('rm -rf ./tmp/*').catch(error => {
+      console.warn('Warning during tmp cleanup:', error.message);
+    });
+
+    // 2. Claude Code に /clear を送信してセッションをクリア（tmux 作法に従って）
     console.log('🧹 Clearing Claude Code sessions...');
     const agents = [
       { name: 'president', target: 'president' },
@@ -1300,65 +1315,17 @@ const performProjectCompletionCleanup = async (): Promise<void> => {
   }
 };
 
-// タスク完了時の軽量クリーンアップ（tmux-continuum 対応）
+// タスク完了時の軽量クリーンアップ（他タスクに影響しない）
 const performTaskCompletionCleanup = async (): Promise<void> => {
   try {
-    console.log('🧹 Performing lightweight task completion cleanup...');
+    console.log('🧹 Performing task completion cleanup (tmp only)...');
 
-    // 1. Claude Code に /clear を送信してからプロセスを終了
-    console.log('🧹 Clearing Claude Code sessions and stopping processes...');
-    const agents = [
-      { name: 'president', target: 'president' },
-      { name: 'boss1', target: 'multiagent:0.0' },
-      { name: 'worker1', target: 'multiagent:0.1' },
-      { name: 'worker2', target: 'multiagent:0.2' },
-      { name: 'worker3', target: 'multiagent:0.3' }
-    ];
-
-    for (const agent of agents) {
-      try {
-        // tmux ペインが存在するかチェック
-        await execAsync(`tmux has-session -t "${agent.target.split(':')[0]}" 2>/dev/null`);
-
-        // 特定のペインを選択してからコマンドを送信
-        await execAsync(`tmux select-pane -t "${agent.target}"`);
-
-        // 入力を安全にクリアしてから /clear を実行
-        await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        // /clear を送信してセッションをクリア（Escape とコマンドと Enter を分けて送信）
-        await execAsync(`tmux send-keys -t "${agent.target}" Escape`);
-        await execAsync(`tmux send-keys -t "${agent.target}" '/clear'`);
-        await execAsync(`tmux send-keys -t "${agent.target}" C-m`);
-        await new Promise(resolve => setTimeout(resolve, 2000)); // クリア処理を待機
-
-        // その後 Ctrl+C を送信して Claude Code プロセスを終了
-        await execAsync(`tmux send-keys -t "${agent.target}" C-c`);
-        await new Promise(resolve => setTimeout(resolve, 500)); // 少し待機
-
-        console.log(`✅ Claude Code cleared and stopped in ${agent.name} (${agent.target})`);
-      } catch (error) {
-        console.warn(`Warning clearing/stopping Claude Code in ${agent.name}:`, error instanceof Error ? error.message : 'Unknown error');
-      }
-    }
-
-    // 2. tmp ディレクトリをクリーンアップ
-    console.log('🗑️ Cleaning tmp directory...');
-    await execAsync('rm -rf ./tmp/*').catch(error => {
-      console.warn('Warning during tmp cleanup:', error.message);
-    });
-
-    // 3. 次回起動用のメッセージ（セットアップは不要）
-    console.log('📝 Ready for next task. Use ./launch-agents.sh to restart Claude Code.');
-
-    console.log('✅ Lightweight cleanup finished - tmux sessions preserved');
-
-    // クライアントに通知
-    io.emit('system-reset', {
-      message: 'Claude Code processes stopped. tmux sessions preserved. Ready for next task.',
-      timestamp: new Date()
-    });
+    // tmp ディレクトリのクリーンアップは無効化（エージェントが管理）
+    // instructions/boss.md と instructions/worker.md でエージェントが管理：
+    // - Worker: touch ./tmp/${TASK_ID}/worker${NUM}_done.txt
+    // - Boss: rm -f ${TASK_TMP_DIR}/worker*_done.txt
+    console.log('📝 Agents will manage tmp files according to instructions/');
+    console.log('✅ Task completion - no backend cleanup needed');
 
   } catch (error) {
     console.error('❌ Error during task completion cleanup:', error);
@@ -1882,8 +1849,8 @@ io.on('connection', async (socket) => {
         io.emit('task-completed', updatedTask);
         console.log(`✅ Task completed: ${updatedTask.title}`);
 
-        // タスク完了時のクリーンアップとセットアップ
-        console.log('🧹 Starting cleanup and reset process...');
+        // タスク完了時のクリーンアップ実行
+        console.log('🧹 Task completed - performing cleanup...');
         await performTaskCompletionCleanup();
 
         // 次のタスクを処理
@@ -2035,12 +2002,89 @@ io.on('connection', async (socket) => {
     }
   });
 
+  // Paused タスクの手動解除機能
+  socket.on('resume-paused-tasks', async () => {
+    console.log('🔄 Manual resume paused tasks requested');
+
+    try {
+      // データベースから paused 状態のタスクを取得
+      const allTasks = await db.getAllTasks();
+      const pausedTasks = allTasks.filter(t => t.status === 'paused');
+      
+      if (pausedTasks.length === 0) {
+        socket.emit('resume-paused-result', {
+          success: true,
+          message: 'No paused tasks found',
+          resumedCount: 0
+        });
+        return;
+      }
+
+      console.log(`🔄 Manually resuming ${pausedTasks.length} paused tasks...`);
+      
+      // データベースでタスクを in_progress に戻す（assignedTo を保持）
+      for (const task of pausedTasks) {
+        await db.updateTask(task.id, { 
+          status: 'in_progress',
+          pausedReason: undefined 
+          // assignedTo は保持（削除しない）
+        });
+        console.log(`▶️ Manually resumed: ${task.title} (ID: ${task.id}) - Agent: ${task.assignedTo}`);
+      }
+      
+      // メモリキューも更新（assignedTo を保持）
+      pausedTasks.forEach(task => {
+        const index = taskQueue.findIndex(t => t.id === task.id);
+        if (index !== -1) {
+          taskQueue[index] = { 
+            ...taskQueue[index], 
+            status: 'in_progress', 
+            pausedReason: undefined 
+            // assignedTo は保持（元のタスクから継承）
+          };
+        }
+      });
+
+      // メモリキャッシュを更新
+      await refreshTaskCache();
+      
+      // クライアントに結果通知
+      socket.emit('resume-paused-result', {
+        success: true,
+        message: `Successfully resumed ${pausedTasks.length} paused tasks`,
+        resumedCount: pausedTasks.length
+      });
+
+      // 全クライアントに再開通知
+      io.emit('paused-tasks-resumed', {
+        message: `${pausedTasks.length} paused tasks manually resumed`,
+        timestamp: new Date(),
+        resumedTasks: pausedTasks.map(t => ({ id: t.id, title: t.title, assignedTo: t.assignedTo }))
+      });
+
+      console.log(`✅ Manually resumed ${pausedTasks.length} paused tasks`);
+      
+    } catch (error) {
+      console.error('❌ Failed to resume paused tasks:', error);
+      socket.emit('resume-paused-result', {
+        success: false,
+        message: 'Failed to resume paused tasks',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
   // 緊急停止機能
   socket.on('emergency-stop', async () => {
     console.log('🚨 Emergency stop requested');
 
     try {
-      // すべての進行中タスクを停止状態に
+      // 1. 全エージェントに SIGINT を送信
+      console.log('🚨 Sending SIGINT to all agents...');
+      const signalResults = await agentProcessManager.sendSIGINTToAll();
+      console.log(`🚨 SIGINT results: ${signalResults.success.length} stopped, ${signalResults.failed.length} failed`);
+      
+      // 2. すべての進行中タスクを停止状態に
       const inProgressTasks = taskQueue.filter(t => t.status === 'in_progress');
       for (const task of inProgressTasks) {
         await db.updateTask(task.id, { status: 'pending' });
@@ -2051,14 +2095,25 @@ io.on('connection', async (socket) => {
         }
       }
 
-      // 全エージェントの状態をクリア
+      // 3. 全エージェントの状態をクリア
       agentStatusCache = {};
 
       await refreshTaskCache();
-      await performTaskCompletionCleanup();
+      
+      // 4. プロセス管理も停止状態に更新
+      for (const agentId of signalResults.success) {
+        agentProcessManager.updateAgentStatus(agentId, 'stopped');
+      }
+      for (const agentId of signalResults.failed) {
+        agentProcessManager.updateAgentStatus(agentId, 'error');
+      }
+      
+      // 緊急停止時もクリーンアップを無効化（ユーザーが手動で対処）
+      console.log('🚨 Emergency stop - agent contexts preserved for manual recovery');
 
       io.emit('emergency-stop-completed', {
-        message: 'Emergency stop completed. All tasks reset.',
+        message: `Emergency stop completed. SIGINT sent to ${signalResults.success.length} agents. All tasks reset.`,
+        signalResults,
         timestamp: new Date()
       });
 
@@ -2634,6 +2689,9 @@ const startServer = async () => {
       
       // Usage Limit 監視タイマーを開始
       startUsageLimitMonitoring();
+      
+      // workspace 監視を開始
+      startWorkspaceWatcher().catch(console.error);
     });
 
   } catch (error) {

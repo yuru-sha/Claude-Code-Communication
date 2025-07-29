@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Activity, AlertCircle, Clock, CheckCircle, X, AlertTriangle, RefreshCw, History, ChevronDown, ChevronUp, Search, Filter, RotateCcw, Download, FileText, Database, Globe, Trash2, StopCircle, Pause } from 'lucide-react';
 import { Task } from '../../types';
 import { downloadProjectAsZip } from '../utils/projectDownloadUtils';
@@ -9,9 +9,10 @@ interface TaskPipelineProps {
   onMarkTaskFailed: (taskId: string, reason: string) => void;
   onDeleteTask: (taskId: string) => void;
   onCancelTask: (taskId: string) => void;
+  onResumePausedTasks: () => void;
 }
 
-export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTask, onCancelTask }: TaskPipelineProps) => {
+const TaskPipelineComponent = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTask, onCancelTask, onResumePausedTasks }: TaskPipelineProps) => {
   const [expandedErrorHistory, setExpandedErrorHistory] = useState<Set<string>>(new Set());
   
   // フィルター状態管理
@@ -246,6 +247,16 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
             <Pause size={14} />
             <span>{taskStats.paused} Paused</span>
           </button>
+          {taskStats.paused > 0 && (
+            <button
+              className="resume-paused-btn"
+              onClick={onResumePausedTasks}
+              title={`Resume ${taskStats.paused} paused tasks`}
+            >
+              <RefreshCw size={14} />
+              <span>Resume All</span>
+            </button>
+          )}
           <button 
             className={`stat-chip cancelled clickable ${filters.status === 'cancelled' ? 'active' : ''}`}
             onClick={() => handleStatChipClick('cancelled')}
@@ -440,3 +451,30 @@ export const TaskPipeline = ({ tasks, onRetryTask, onMarkTaskFailed, onDeleteTas
     </div>
   );
 };
+
+// Memoized component for performance optimization
+export const TaskPipeline = React.memo(TaskPipelineComponent, (prevProps, nextProps) => {
+  // Custom comparison function for shallow comparison of tasks array
+  if (prevProps.tasks.length !== nextProps.tasks.length) {
+    return false;
+  }
+  
+  // Check if tasks have changed by comparing references and key properties
+  for (let i = 0; i < prevProps.tasks.length; i++) {
+    const prevTask = prevProps.tasks[i];
+    const nextTask = nextProps.tasks[i];
+    
+    if (prevTask.id !== nextTask.id || 
+        prevTask.status !== nextTask.status || 
+        prevTask.updatedAt !== nextTask.updatedAt) {
+      return false;
+    }
+  }
+  
+  // Compare callback functions by reference (they should be memoized in parent)
+  return prevProps.onRetryTask === nextProps.onRetryTask &&
+         prevProps.onMarkTaskFailed === nextProps.onMarkTaskFailed &&
+         prevProps.onDeleteTask === nextProps.onDeleteTask &&
+         prevProps.onCancelTask === nextProps.onCancelTask &&
+         prevProps.onResumePausedTasks === nextProps.onResumePausedTasks;
+});
