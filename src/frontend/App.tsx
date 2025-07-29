@@ -453,9 +453,6 @@ function App() {
             <div className="panel">
               <div className="panel-header">
                 <h2 className="panel-title">Quick Actions</h2>
-                <button className="panel-action">
-                  <Send size={16} />
-                </button>
               </div>
               <div className="panel-content">
                 <div className="quick-action-form">
@@ -496,9 +493,6 @@ function App() {
             <div className="panel">
               <div className="panel-header">
                 <h2 className="panel-title">Agent Status</h2>
-                <button className="panel-action">
-                  <Users size={16} />
-                </button>
               </div>
               <div className="panel-content">
                 <div className="agent-status-grid">
