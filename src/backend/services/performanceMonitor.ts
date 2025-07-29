@@ -1,7 +1,7 @@
+import { logError } from '../utils/errorHandler';
+import { ActivityAnalyzer } from './activityAnalyzer';
 import { AgentActivityMonitoringService } from './agentActivityMonitoringService';
 import { TerminalOutputMonitor } from './terminalOutputMonitor';
-import { ActivityAnalyzer } from './activityAnalyzer';
-import { logError } from '../utils/errorHandler';
 
 /**
  * System performance metrics
@@ -105,7 +105,6 @@ export class PerformanceMonitor {
     this.terminalMonitor = terminalMonitor;
     this.activityAnalyzer = activityAnalyzer;
     
-    console.log(`📊 [${new Date().toISOString()}] Performance monitor initialized`);
   }
 
   /**
@@ -113,7 +112,7 @@ export class PerformanceMonitor {
    */
   public start(): void {
     if (this.monitoringTimer) {
-      console.warn('⚠️ Performance monitoring is already running');
+      console.warn('Performance monitoring is already running');
       return;
     }
 
@@ -127,7 +126,6 @@ export class PerformanceMonitor {
       this.collectMetrics();
     }, this.monitoringInterval);
 
-    console.log(`📊 [${new Date().toISOString()}] Performance monitoring started`);
   }
 
   /**
@@ -139,7 +137,6 @@ export class PerformanceMonitor {
       this.monitoringTimer = null;
     }
 
-    console.log(`📊 [${new Date().toISOString()}] Performance monitoring stopped`);
   }
 
   /**
@@ -148,7 +145,7 @@ export class PerformanceMonitor {
   private collectMetrics(): void {
     try {
       if (!this.monitoringService || !this.terminalMonitor || !this.activityAnalyzer) {
-        console.warn('⚠️ Performance monitoring services not initialized');
+        console.warn('Performance monitoring services not initialized');
         return;
       }
 
@@ -204,15 +201,6 @@ export class PerformanceMonitor {
       // Check for performance issues and generate alerts
       this.checkPerformanceThresholds(systemMetrics);
 
-      // Log summary
-      console.log(`📊 [${now.toISOString()}] Performance metrics collected:`, {
-        memoryMB: systemMetrics.memoryUsage.totalMB.toFixed(2),
-        avgCheckMs: systemMetrics.performance.averageCheckDuration.toFixed(0),
-        cacheHitRate: systemMetrics.performance.cacheHitRate.toFixed(1) + '%',
-        successRate: systemMetrics.performance.successRate.toFixed(1) + '%',
-        activeAgents: systemMetrics.activity.activeAgents,
-        errorStates: systemMetrics.activity.errorStates
-      });
 
     } catch (error) {
       logError(error instanceof Error ? error : new Error(String(error)), 'PerformanceMonitor.collectMetrics');
@@ -420,7 +408,6 @@ export class PerformanceMonitor {
   private triggerAutomaticOptimization(alert: PerformanceAlert): void {
     if (!this.monitoringService) return;
 
-    console.log(`🔧 [${new Date().toISOString()}] Triggering automatic optimization for: ${alert.metric}`);
 
     try {
       switch (alert.metric) {
@@ -447,12 +434,10 @@ export class PerformanceMonitor {
 
         case 'errorStates':
           // This would require more complex error recovery
-          console.log(`⚠️ [${new Date().toISOString()}] Error state optimization requires manual intervention`);
           break;
       }
 
       this.lastOptimizationTime = new Date();
-      console.log(`✅ [${new Date().toISOString()}] Automatic optimization completed for: ${alert.metric}`);
 
     } catch (error) {
       logError(error instanceof Error ? error : new Error(String(error)), 
@@ -524,7 +509,6 @@ export class PerformanceMonitor {
    */
   public updateThresholds(newThresholds: Partial<PerformanceThresholds>): void {
     Object.assign(this.thresholds, newThresholds);
-    console.log(`🔧 [${new Date().toISOString()}] Performance thresholds updated:`, newThresholds);
   }
 
   /**
@@ -534,7 +518,6 @@ export class PerformanceMonitor {
     this.stop();
     this.metricsHistory = [];
     this.alerts = [];
-    console.log(`🧹 [${new Date().toISOString()}] PerformanceMonitor cleanup completed`);
   }
 }
 

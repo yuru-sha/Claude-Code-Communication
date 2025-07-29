@@ -17,8 +17,6 @@ function App() {
     { id: 'worker3', name: 'Worker3', role: 'Developer', status: 'idle', tasksCompleted: 0, efficiency: 85 }
   ]);
 
-  // Debug: agents 配列をコンソールに出力
-  console.log('Current agents:', agents);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [expandedErrorHistory, setExpandedErrorHistory] = useState<Set<string>>(new Set());
@@ -71,7 +69,6 @@ function App() {
 
     // エージェント状態のリアルタイム更新（拡張版）
     socket.on('agent-status-updated', (agentUpdate: any) => {
-      console.log('🔄 Agent status update received:', agentUpdate);
       setAgents(prev => prev.map(agent => 
         agent.id === agentUpdate.id 
           ? { 
@@ -89,7 +86,6 @@ function App() {
 
     // 詳細な活動検知イベント
     socket.on('agent-activity-detected', (activityInfo: any) => {
-      console.log('🎯 Agent activity detected:', activityInfo);
       // 活動検知の詳細情報を状態に反映（オプション）
       setAgents(prev => prev.map(agent => 
         agent.id === activityInfo.agentId 
@@ -104,7 +100,6 @@ function App() {
 
     // 詳細なエージェント状態イベント
     socket.on('agent-detailed-status', (detailedStatus: any) => {
-      console.log('📊 Detailed agent status received:', detailedStatus);
       // 詳細状態情報を必要に応じて処理
       // 現在は基本的な状態更新のみ実装
     });
@@ -114,12 +109,9 @@ function App() {
     });
 
     socket.on('task-deleted', (data: any) => {
-      console.log('🗑️ Task deleted event received:', data);
       const taskId = typeof data === 'string' ? data : data.taskId;
-      console.log('🗑️ Filtering out task:', taskId);
       setTasks(prevTasks => {
         const newTasks = prevTasks.filter(t => t.id !== taskId);
-        console.log('🗑️ Tasks before filter:', prevTasks.length, 'after filter:', newTasks.length);
         return newTasks;
       });
     });
@@ -146,12 +138,10 @@ function App() {
 
     socket.on('auto-recovery-performed', (data: any) => {
       setAutoRecoveryStatus(`🔧 自動復旧実行中: ${data.message}`);
-      console.log('Auto recovery performed:', data);
     });
 
     socket.on('auto-recovery-status', (data: any) => {
       setAutoRecoveryStatus(`✅ 自動復旧状況: ${data.message}`);
-      console.log('Auto recovery status:', data);
       
       // 5 秒後にステータスをクリア
       setTimeout(() => {
@@ -161,7 +151,6 @@ function App() {
 
     socket.on('auto-recovery-failed', (data: any) => {
       setAutoRecoveryStatus(`❌ 自動復旧失敗: ${data.message}`);
-      console.error('Auto recovery failed:', data);
       
       // 10 秒後にステータスをクリア
       setTimeout(() => {
@@ -170,7 +159,6 @@ function App() {
     });
 
     socket.on('task-completion-detected', (data: any) => {
-      console.log('🎯 Task completion detected:', data);
       
       // 完了検知の通知を追加
       const notification = {
@@ -190,12 +178,10 @@ function App() {
 
     socket.on('task-completion-monitoring-status', (data: any) => {
       setIsTaskCompletionMonitoringEnabled(data.enabled);
-      console.log('Task completion monitoring status:', data);
     });
 
     socket.on('session-reset-completed', (data: any) => {
       setAutoRecoveryStatus(`✅ セッションリセット完了: ${data.message}`);
-      console.log('Project reset completed:', data);
       
       // 5 秒後にステータスをクリア
       setTimeout(() => {
@@ -205,7 +191,6 @@ function App() {
 
     socket.on('session-reset-failed', (data: any) => {
       setAutoRecoveryStatus(`❌ セッションリセット失敗: ${data.message}`);
-      console.error('Project reset failed:', data);
       
       // 10 秒後にステータスをクリア
       setTimeout(() => {
@@ -215,7 +200,6 @@ function App() {
 
     socket.on('usage-limit-cleared', (data: any) => {
       setAutoRecoveryStatus(`✅ Usage Limit クリア完了: ${data.message}`);
-      console.log('Usage limit cleared:', data);
       
       // 5 秒後にステータスをクリア
       setTimeout(() => {
@@ -225,7 +209,6 @@ function App() {
 
     socket.on('usage-limit-clear-failed', (data: any) => {
       setAutoRecoveryStatus(`❌ Usage Limit クリア失敗: ${data.message}`);
-      console.error('Usage limit clear failed:', data);
       
       // 10 秒後にステータスをクリア
       setTimeout(() => {
@@ -234,7 +217,6 @@ function App() {
     });
 
     socket.on('task-delete-rejected', (data: any) => {
-      console.warn('Task delete rejected:', data);
       alert(`タスクの削除が拒否されました：\n\n${data.message}\n\n タスク: ${data.taskTitle}\n 現在のステータス: ${data.currentStatus}`);
     });
 
@@ -296,12 +278,8 @@ function App() {
   }, [socket]);
 
   const handleDeleteTask = useCallback((taskId: string) => {
-    console.log('🗑️ handleDeleteTask called:', taskId);
     if (socket) {
-      console.log('🗑️ Emitting delete-task event:', taskId);
       socket.emit('delete-task', taskId);
-    } else {
-      console.error('🗑️ Socket not available for delete task');
     }
   }, [socket]);
 

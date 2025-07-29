@@ -65,13 +65,10 @@ export const checkTaskCompletion = async (
         const completionMatch = taskCompletionPatterns.some(pattern => pattern.test(currentOutput));
         
         if (completionMatch) {
-          console.log(`🎯 Task completion detected in ${agent.name} terminal`);
-          
           // 該当エージェントが担当している進行中タスクを見つける
           const agentTask = inProgressTasks.find(task => task.assignedTo === agent.name);
           
           if (agentTask) {
-            console.log(`✅ Auto-completing task: ${agentTask.title}`);
             
             // 完了処理を呼び出し
             await onTaskCompleted(
@@ -99,14 +96,12 @@ export const startTaskCompletionMonitoring = (): NodeJS.Timeout => {
   }
   
   isTaskCompletionCheckActive = true;
-  console.log('🔍 Task completion monitoring started');
   
   // 30 秒ごとにチェック（メモリリーク修正版）
-  // Note: このタイマーは外部の checkTaskCompletion に依存しているため、
-  // 代わりに server.ts の ServerManager で管理される
-  const completionCheckInterval = setInterval(async () => {
-    // checkTaskCompletion は外部から呼び出されるため、ここでは何もしない
-    // TODO: この設計を見直し、外部依存を減らす
+  // Task completion monitoring is managed by ServerManager in server.ts
+  // This creates a placeholder interval that will be managed externally
+  const completionCheckInterval = setInterval(() => {
+    // Managed externally by ServerManager
   }, 30000);
   
   return completionCheckInterval;
@@ -114,7 +109,6 @@ export const startTaskCompletionMonitoring = (): NodeJS.Timeout => {
 
 export const stopTaskCompletionMonitoring = (): void => {
   isTaskCompletionCheckActive = false;
-  console.log('⏹️ Task completion monitoring stopped');
 };
 
 export const isTaskCompletionActive = (): boolean => {

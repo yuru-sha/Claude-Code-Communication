@@ -1,8 +1,9 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+
 import { ActivityInfo, ActivityType, ACTIVITY_DETECTION_CONFIG } from '../../types/index';
-import { activityPatterns } from './activityPatterns';
 import { TmuxError, logError, withErrorHandling, withRetry } from '../utils/errorHandler';
+import { activityPatterns } from './activityPatterns';
 import { detectUsageLimit, saveUsageLimitToDatabase } from './taskManager';
 
 const execAsync = promisify(exec);
@@ -240,23 +241,20 @@ export class TerminalOutputMonitor {
   public async monitorAllAgents(): Promise<TerminalMonitorResult[]> {
     const results: TerminalMonitorResult[] = [];
 
-    console.log(`🔍 [${new Date().toISOString()}] Starting monitoring for ${this.agentTargets.length} agents`);
 
     for (const agent of this.agentTargets) {
       try {
-        console.log(`🔍 [${new Date().toISOString()}] Monitoring agent: ${agent.name} (${agent.target})`);
 
         const result = await this.monitorAgentActivity(agent);
         results.push(result);
 
-        console.log(`✅ [${new Date().toISOString()}] Successfully monitored ${agent.name}: ${result.hasNewActivity ? 'active' : 'idle'}`);
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logError(error instanceof Error ? error : new Error(errorMessage),
           `TerminalOutputMonitor.monitorAllAgents.${agent.name}`);
 
-        console.error(`❌ [${new Date().toISOString()}] Failed to monitor ${agent.name}: ${errorMessage}`);
+        console.error(`Failed to monitor ${agent.name}: ${errorMessage}`);
 
         // Return error state for failed monitoring
         results.push({
@@ -269,7 +267,6 @@ export class TerminalOutputMonitor {
       }
     }
 
-    console.log(`✅ [${new Date().toISOString()}] Completed monitoring: ${results.length} results`);
     return results;
   }
 
@@ -288,7 +285,6 @@ export class TerminalOutputMonitor {
 
     // Usage limit 検知をターミナル出力から実行
     if (currentOutput && detectUsageLimit(currentOutput)) {
-      console.log(`🚨 Usage limit detected in terminal output for ${agent.name}: ${currentOutput.substring(0, 200)}...`);
       await saveUsageLimitToDatabase(currentOutput);
       
       // Usage limit 処理を実行 (import が必要)
@@ -333,7 +329,6 @@ export class TerminalOutputMonitor {
         const timeoutMs = 3000; // 3 second timeout for tests
         const command = `tmux capture-pane -t "${agent.target}" -p`;
 
-        console.log(`🔍 [${new Date().toISOString()}] Capturing terminal output for ${agent.name}: ${command}`);
 
         try {
           const { stdout, stderr } = await Promise.race([
@@ -344,16 +339,15 @@ export class TerminalOutputMonitor {
           ]);
 
           if (stderr) {
-            console.warn(`⚠️ [${new Date().toISOString()}] Terminal capture warning for ${agent.name}: ${stderr}`);
+            console.warn(`Terminal capture warning for ${agent.name}: ${stderr}`);
           }
 
           const output = stdout || '';
-          console.log(`✅ [${new Date().toISOString()}] Captured ${output.length} chars for ${agent.name}`);
 
           return output;
         } catch (timeoutError) {
           if (timeoutError instanceof TmuxError && timeoutError.message.includes('timeout')) {
-            console.warn(`⏰ [${new Date().toISOString()}] Terminal capture timeout for ${agent.name}`);
+            console.warn(`Terminal capture timeout for ${agent.name}`);
             return ''; // Return empty string on timeout
           }
           throw timeoutError;
@@ -370,7 +364,7 @@ export class TerminalOutputMonitor {
       logError(error instanceof Error ? error : new TmuxError(errorMessage, agent.target),
         `TerminalOutputMonitor.captureTerminalOutput.${agent.name}`);
 
-      console.warn(`❌ [${new Date().toISOString()}] Failed to capture terminal output for ${agent.name} after retries: ${errorMessage}`);
+      console.warn(`Failed to capture terminal output for ${agent.name} after retries: ${errorMessage}`);
       return '';
     }
   }
@@ -385,11 +379,9 @@ export class TerminalOutputMonitor {
     agentName: string
   ): ActivityInfo | null {
     try {
-      console.log(`🔍 [${new Date().toISOString()}] Detecting activity for ${agentName}: current=${currentOutput.length}, previous=${previousOutput.length}`);
 
       // If outputs are identical, no new activity
       if (currentOutput === previousOutput) {
-        console.log(`📊 [${new Date().toISOString()}] No change in output for ${agentName}`);
         return null;
       }
 
@@ -397,17 +389,14 @@ export class TerminalOutputMonitor {
       const newContent = this.extractNewContent(currentOutput, previousOutput);
 
       if (!newContent.trim()) {
-        console.log(`📊 [${new Date().toISOString()}] No meaningful new content for ${agentName}`);
         return null;
       }
 
-      console.log(`🔍 [${new Date().toISOString()}] Analyzing ${newContent.length} chars of new content for ${agentName}`);
 
       // Use activity patterns to analyze the new content
       const matchedPattern = activityPatterns.findBestMatch(newContent);
 
       if (!matchedPattern) {
-        console.log(`⚠️ [${new Date().toISOString()}] No pattern matched for ${agentName}, defaulting to thinking`);
         // Default to thinking if we detect new content but no specific pattern
         return {
           activityType: 'thinking',
@@ -416,7 +405,6 @@ export class TerminalOutputMonitor {
         };
       }
 
-      console.log(`✅ [${new Date().toISOString()}] Pattern matched for ${agentName}: ${matchedPattern.activityType}`);
 
       // Extract additional context based on activity type
       const fileName = this.extractFileName(newContent);
@@ -430,11 +418,6 @@ export class TerminalOutputMonitor {
         command
       };
 
-      console.log(`📊 [${new Date().toISOString()}] Activity detected for ${agentName}:`, {
-        type: activityInfo.activityType,
-        hasFile: !!fileName,
-        hasCommand: !!command
-      });
 
       return activityInfo;
 
@@ -656,7 +639,6 @@ export class TerminalOutputMonitor {
     let cleanedItems = 0;
     let memoryFreed = 0;
 
-    console.log(`🧹 [${now.toISOString()}] Starting enhanced memory cleanup operation`);
 
     // Adaptive cleanup based on current memory usage
     const currentMemoryMB = this.performanceMetrics.memoryUsage / (1024 * 1024);
@@ -718,7 +700,6 @@ export class TerminalOutputMonitor {
     if (isCriticalMemory && global.gc) {
       try {
         global.gc();
-        console.log(`🗑️ [${now.toISOString()}] Forced garbage collection due to critical memory usage`);
       } catch (error) {
         // Ignore if gc is not available
       }
@@ -731,13 +712,6 @@ export class TerminalOutputMonitor {
     this.performanceMetrics.cleanupOperations++;
     this.performanceMetrics.lastCleanupTime = now;
 
-    console.log(`✅ [${now.toISOString()}] Enhanced memory cleanup completed:`, {
-      itemsCleaned: cleanedItems,
-      memoryFreedKB: Math.round(memoryFreed / 1024),
-      durationMs: cleanupDuration,
-      memoryPressure: isCriticalMemory ? 'critical' : isHighMemory ? 'high' : 'normal',
-      currentMemoryMB: Math.round(currentMemoryMB * 100) / 100
-    });
   }
 
   /**
@@ -892,7 +866,6 @@ export class TerminalOutputMonitor {
     this.lastActivityDetected.clear();
     this.outputBuffers.clear();
 
-    console.log(`🧹 [${new Date().toISOString()}] TerminalOutputMonitor cleanup completed`);
   }
 
   /**

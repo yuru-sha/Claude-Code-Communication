@@ -1,7 +1,7 @@
-import { TerminalOutputMonitor } from './terminalOutputMonitor';
+import { logError } from '../utils/errorHandler';
 import { ActivityAnalyzer } from './activityAnalyzer';
 import { AgentActivityMonitoringService } from './agentActivityMonitoringService';
-import { logError } from '../utils/errorHandler';
+import { TerminalOutputMonitor } from './terminalOutputMonitor';
 
 /**
  * System performance optimization metrics
@@ -73,7 +73,6 @@ export class PerformanceOptimizer {
       lastOptimizationTime: new Date()
     };
 
-    console.log(`🔧 [${new Date().toISOString()}] Performance optimizer initialized with config:`, this.config);
   }
 
   /**
@@ -92,7 +91,6 @@ export class PerformanceOptimizer {
       this.startAutoOptimization();
     }
 
-    console.log(`🔧 [${new Date().toISOString()}] Performance optimizer initialized with monitoring services`);
   }
 
   /**
@@ -100,7 +98,7 @@ export class PerformanceOptimizer {
    */
   public startAutoOptimization(): void {
     if (this.optimizationTimer) {
-      console.warn('⚠️ Auto optimization is already running');
+      console.warn('Auto optimization is already running');
       return;
     }
 
@@ -113,7 +111,6 @@ export class PerformanceOptimizer {
       this.performAutomaticOptimization();
     }, this.config.optimizationIntervalMs);
 
-    console.log(`🔧 [${new Date().toISOString()}] Auto optimization started with ${this.config.optimizationIntervalMs}ms interval`);
   }
 
   /**
@@ -125,7 +122,6 @@ export class PerformanceOptimizer {
       this.optimizationTimer = null;
     }
 
-    console.log(`🔧 [${new Date().toISOString()}] Auto optimization stopped`);
   }
 
   /**
@@ -136,8 +132,6 @@ export class PerformanceOptimizer {
     const startTime = Date.now();
     const beforeMetrics = await this.collectCurrentMetrics();
     
-    console.log(`🔧 [${new Date().toISOString()}] Starting comprehensive performance optimization`);
-
     let optimizationsPerformed = 0;
     let memoryFreedMB = 0;
 
@@ -185,11 +179,6 @@ export class PerformanceOptimizer {
       this.updateMetrics(optimizationMetrics);
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [${new Date().toISOString()}] Comprehensive optimization completed in ${duration}ms:`, {
-        optimizations: optimizationsPerformed,
-        memoryFreedMB: Math.round(memoryFreedMB * 100) / 100,
-        performanceGain: Math.round(performanceGain * 100) / 100 + '%'
-      });
 
       return optimizationMetrics;
 
@@ -207,7 +196,6 @@ export class PerformanceOptimizer {
     let optimizations = 0;
     let memoryFreedMB = 0;
 
-    console.log(`🧹 [${new Date().toISOString()}] Starting memory optimization`);
 
     try {
       // Get current memory usage
@@ -217,7 +205,6 @@ export class PerformanceOptimizer {
       if (global.gc && beforeMemory > this.config.memoryThresholdMB) {
         global.gc();
         optimizations++;
-        console.log(`🗑️ [${new Date().toISOString()}] Forced garbage collection`);
       }
 
       // Optimize terminal monitor memory
@@ -243,12 +230,6 @@ export class PerformanceOptimizer {
       const afterMemory = await this.getCurrentMemoryUsage();
       const actualMemoryFreed = Math.max(0, beforeMemory - afterMemory);
       
-      console.log(`✅ [${new Date().toISOString()}] Memory optimization completed:`, {
-        optimizations,
-        memoryFreedMB: Math.round(actualMemoryFreed * 100) / 100,
-        beforeMB: Math.round(beforeMemory * 100) / 100,
-        afterMB: Math.round(afterMemory * 100) / 100
-      });
 
       return { optimizations, memoryFreedMB: actualMemoryFreed };
 
@@ -265,7 +246,6 @@ export class PerformanceOptimizer {
   private async optimizePatternMatching(): Promise<{ optimizations: number }> {
     let optimizations = 0;
 
-    console.log(`⚡ [${new Date().toISOString()}] Starting pattern matching optimization`);
 
     try {
       if (this.activityAnalyzer) {
@@ -280,12 +260,6 @@ export class PerformanceOptimizer {
         
         const afterMetrics = this.activityAnalyzer.getPerformanceMetrics();
         
-        console.log(`✅ [${new Date().toISOString()}] Pattern matching optimization completed:`, {
-          optimizations,
-          cacheCleared: true,
-          beforeCacheSize: beforeMetrics.cacheSize,
-          afterCacheSize: afterMetrics.cacheSize
-        });
       }
 
       return { optimizations };
@@ -304,7 +278,6 @@ export class PerformanceOptimizer {
     let optimizations = 0;
     let memoryFreedMB = 0;
 
-    console.log(`📊 [${new Date().toISOString()}] Starting buffer optimization`);
 
     try {
       if (this.terminalMonitor) {
@@ -317,12 +290,6 @@ export class PerformanceOptimizer {
         const afterMetrics = this.terminalMonitor.getPerformanceMetrics();
         memoryFreedMB = Math.max(0, beforeMetrics.memoryUsageMB - afterMetrics.memoryUsageMB);
 
-        console.log(`✅ [${new Date().toISOString()}] Buffer optimization completed:`, {
-          optimizations,
-          memoryFreedMB: Math.round(memoryFreedMB * 100) / 100,
-          bufferEfficiencyBefore: Math.round(beforeMetrics.bufferEfficiency * 100) / 100,
-          bufferEfficiencyAfter: Math.round(afterMetrics.bufferEfficiency * 100) / 100
-        });
       }
 
       return { optimizations, memoryFreedMB };
@@ -341,7 +308,6 @@ export class PerformanceOptimizer {
     let optimizations = 0;
     let memoryFreedMB = 0;
 
-    console.log(`💾 [${new Date().toISOString()}] Starting cache optimization`);
 
     try {
       if (this.activityAnalyzer) {
@@ -356,12 +322,6 @@ export class PerformanceOptimizer {
           memoryFreedMB = Math.max(0, (beforeMetrics.memoryUsageKB - afterMetrics.memoryUsageKB) / 1024);
         }
 
-        console.log(`✅ [${new Date().toISOString()}] Cache optimization completed:`, {
-          optimizations,
-          memoryFreedMB: Math.round(memoryFreedMB * 100) / 100,
-          cacheHitRateBefore: Math.round(beforeMetrics.cacheHitRate * 100) / 100,
-          memoryUsageKB: Math.round(beforeMetrics.memoryUsageKB * 100) / 100
-        });
       }
 
       return { optimizations, memoryFreedMB };
@@ -378,7 +338,6 @@ export class PerformanceOptimizer {
   private async optimizeSystemPerformance(): Promise<{ optimizations: number }> {
     let optimizations = 0;
 
-    console.log(`⚙️ [${new Date().toISOString()}] Starting system performance optimization`);
 
     try {
       if (this.monitoringService) {
@@ -386,9 +345,6 @@ export class PerformanceOptimizer {
         this.monitoringService.optimizePerformance();
         optimizations++;
 
-        console.log(`✅ [${new Date().toISOString()}] System performance optimization completed:`, {
-          optimizations
-        });
       }
 
       return { optimizations };
@@ -407,7 +363,6 @@ export class PerformanceOptimizer {
       // Check hourly limit
       this.checkHourlyLimit();
       if (this.hourlyOptimizationCount >= this.config.maxOptimizationsPerHour) {
-        console.log(`⏰ [${new Date().toISOString()}] Hourly optimization limit reached (${this.config.maxOptimizationsPerHour})`);
         return;
       }
 
@@ -417,7 +372,6 @@ export class PerformanceOptimizer {
         return;
       }
 
-      console.log(`🔧 [${new Date().toISOString()}] Automatic optimization triggered`);
       
       // Perform optimization
       await this.performComprehensiveOptimization();
@@ -437,19 +391,16 @@ export class PerformanceOptimizer {
       
       // Check memory threshold
       if (currentMetrics.memoryUsageMB > this.config.memoryThresholdMB) {
-        console.log(`📊 [${new Date().toISOString()}] Memory threshold exceeded: ${currentMetrics.memoryUsageMB}MB > ${this.config.memoryThresholdMB}MB`);
         return true;
       }
 
       // Check performance threshold
       if (currentMetrics.averageCheckDuration > this.config.performanceThresholdMs) {
-        console.log(`📊 [${new Date().toISOString()}] Performance threshold exceeded: ${currentMetrics.averageCheckDuration}ms > ${this.config.performanceThresholdMs}ms`);
         return true;
       }
 
       // Check cache efficiency
       if (currentMetrics.cacheHitRate < 60) {
-        console.log(`📊 [${new Date().toISOString()}] Cache efficiency low: ${currentMetrics.cacheHitRate}% < 60%`);
         return true;
       }
 
@@ -578,7 +529,6 @@ export class PerformanceOptimizer {
    */
   public updateConfig(newConfig: Partial<OptimizationConfig>): void {
     this.config = { ...this.config, ...newConfig };
-    console.log(`🔧 [${new Date().toISOString()}] Performance optimizer configuration updated:`, newConfig);
   }
 
   /**
@@ -587,7 +537,6 @@ export class PerformanceOptimizer {
   public cleanup(): void {
     this.stopAutoOptimization();
     this.optimizationHistory = [];
-    console.log(`🧹 [${new Date().toISOString()}] Performance optimizer cleanup completed`);
   }
 }
 
