@@ -439,30 +439,6 @@ body {
   transform: scale(0.95);
 }
 
-.usage-limit-clear-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: var(--radius-md);
-  color: var(--primary-light);
-  cursor: pointer;
-  transition: var(--transition-fast);
-  margin-left: var(--space-xs);
-}
-
-.usage-limit-clear-button:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.5);
-  transform: scale(1.05);
-}
-
-.usage-limit-clear-button:active {
-  transform: scale(0.95);
-}
 
 .monitoring-toggle-button {
   display: flex;

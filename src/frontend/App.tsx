@@ -198,23 +198,7 @@ function App() {
       }, 10000);
     });
 
-    socket.on('usage-limit-cleared', (data: any) => {
-      setAutoRecoveryStatus(`✅ Usage Limit クリア完了: ${data.message}`);
-      
-      // 5 秒後にステータスをクリア
-      setTimeout(() => {
-        setAutoRecoveryStatus(null);
-      }, 5000);
-    });
 
-    socket.on('usage-limit-clear-failed', (data: any) => {
-      setAutoRecoveryStatus(`❌ Usage Limit クリア失敗: ${data.message}`);
-      
-      // 10 秒後にステータスをクリア
-      setTimeout(() => {
-        setAutoRecoveryStatus(null);
-      }, 10000);
-    });
 
     socket.on('task-delete-rejected', (data: any) => {
       alert(`タスクの削除が拒否されました：\n\n${data.message}\n\n タスク: ${data.taskTitle}\n 現在のステータス: ${data.currentStatus}`);
@@ -238,8 +222,6 @@ function App() {
       socket.off('task-completion-monitoring-status');
       socket.off('session-reset-completed');
       socket.off('session-reset-failed');
-      socket.off('usage-limit-cleared');
-      socket.off('usage-limit-clear-failed');
       socket.off('task-delete-rejected');
     };
   }, [socket]);
@@ -303,12 +285,6 @@ function App() {
     }
   }, [socket]);
 
-  const handleClearUsageLimit = useCallback(() => {
-    if (socket) {
-      socket.emit('clear-usage-limit');
-      setAutoRecoveryStatus('🔄 Usage Limit クリア中...');
-    }
-  }, [socket]);
 
   const toggleErrorHistory = useCallback((taskId: string) => {
     setExpandedErrorHistory(prev => {
@@ -361,7 +337,6 @@ function App() {
         onManualRecovery={handleManualRecovery}
         onToggleTaskCompletionMonitoring={handleToggleTaskCompletionMonitoring}
         onSessionReset={handleSessionReset}
-        onClearUsageLimit={handleClearUsageLimit}
       />
 
       {/* Main Dashboard */}

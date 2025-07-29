@@ -2217,62 +2217,6 @@ io.on('connection', async (socket) => {
     }
   });
 
-  // Usage limit 状態をクリア
-  socket.on('clear-usage-limit', async () => {
-    console.log('🔄 Usage limit clear requested by user');
-    
-    try {
-      await db.clearUsageLimitState();
-      
-      // 全クライアントに通知
-      io.emit('usage-limit-cleared', {
-        message: 'Usage limit state cleared successfully',
-        timestamp: new Date()
-      });
-      
-      // タスクキューを再処理
-      setTimeout(() => {
-        processTaskQueue(
-          taskQueue,
-          checkUsageLimitResolution,
-          assignTaskToPresident,
-          handleTaskAssigned,
-          handleUsageLimitResolved
-        );
-      }, 1000);
-      
-      // President に進捗確認メッセージを送信
-      setTimeout(async () => {
-        try {
-          console.log('📤 Sending progress check message to president after usage limit cleared');
-          const { spawn } = require('child_process');
-          const sendMessage = spawn('./agent-send.sh', ['president', 'プロジェクトの進捗を確認してください。'], {
-            stdio: 'inherit',
-            cwd: process.cwd()
-          });
-          
-          sendMessage.on('close', (code) => {
-            if (code === 0) {
-              console.log('✅ Progress check message sent to president successfully');
-            } else {
-              console.error(`❌ Failed to send message to president, exit code: ${code}`);
-            }
-          });
-        } catch (error) {
-          console.error('❌ Error sending progress check message to president:', error);
-        }
-      }, 2000);
-      
-      console.log('✅ Usage limit cleared and task processing resumed');
-    } catch (error) {
-      console.error('❌ Failed to clear usage limit:', error);
-      socket.emit('usage-limit-clear-failed', {
-        message: 'Failed to clear usage limit',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date()
-      });
-    }
-  });
 
   // タスク完了監視の制御
   socket.on('toggle-task-completion-monitoring', (enabled: boolean) => {

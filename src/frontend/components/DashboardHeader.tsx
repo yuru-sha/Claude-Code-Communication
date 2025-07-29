@@ -12,7 +12,6 @@ interface DashboardHeaderProps {
   onManualRecovery: () => void;
   onToggleTaskCompletionMonitoring: (enabled: boolean) => void;
   onSessionReset: () => void;
-  onClearUsageLimit: () => void;
 }
 
 export const DashboardHeader = ({
@@ -24,8 +23,7 @@ export const DashboardHeader = ({
   isTaskCompletionMonitoringEnabled,
   onManualRecovery,
   onToggleTaskCompletionMonitoring,
-  onSessionReset,
-  onClearUsageLimit
+  onSessionReset
 }: DashboardHeaderProps) => {
   const handleManualRecovery = useCallback(() => {
     onManualRecovery();
@@ -41,11 +39,6 @@ export const DashboardHeader = ({
     }
   }, [onSessionReset]);
 
-  const handleClearUsageLimit = useCallback(() => {
-    if (confirm('Usage Limit 状態をクリアしますか？\n\n• 現在の利用制限状態をリセット\n• タスク処理を再開')) {
-      onClearUsageLimit();
-    }
-  }, [onClearUsageLimit]);
 
   return (
     <header className="dashboard-header">
@@ -130,13 +123,6 @@ export const DashboardHeader = ({
                   title="開発環境をリセット (tmux セッション再構築 + Claude Code 起動)"
                 >
                   <RotateCcw size={14} />
-                </button>
-                <button 
-                  className="usage-limit-clear-button"
-                  onClick={handleClearUsageLimit}
-                  title="Usage Limit をクリア (タスク処理を再開)"
-                >
-                  <Activity size={14} />
                 </button>
               </div>
             </div>
