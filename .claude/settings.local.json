@@ -12,8 +12,21 @@
       "Bash(then)",
       "Bash(else)",
       "Bash(grep:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(mkdir:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(npx madge:*)",
+      "Bash(npx depcruise:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(npm audit:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run optimize:images:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)"
     ],
-    "deny": []
+    "deny": [
+      "Bash(npm run dev)"
+    ]
   }
 }
