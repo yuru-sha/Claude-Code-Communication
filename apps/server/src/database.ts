@@ -1,5 +1,5 @@
-import { PrismaClient } from './generated/prisma';
-import type { Task as PrismaTask } from './generated/prisma';
+import { PrismaClient } from '@prisma/client';
+import type { Task as PrismaTask } from '@prisma/client';
 // Prisma generated types - using local generated client
 
 // Prisma クライアントのシングルトンインスタンス

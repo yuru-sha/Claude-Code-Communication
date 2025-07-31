@@ -30,6 +30,7 @@ export default defineConfig({
     }
   },
   root: '.',
+  publicDir: 'public',
   build: {
     outDir: 'dist',
     sourcemap: false, // Disable sourcemaps in production
