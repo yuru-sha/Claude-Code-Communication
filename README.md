@@ -1,7 +1,7 @@
 # Claude Code Communication
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yuru-sha/Claude-Code-Communication)
 
-複数の AI エージェントが協力してタスクを実行するシステムです。
+複数の AI エージェントが協力してタスクを実行するモノレポ構成のシステムです。
 
 ![Dashboard](assets/screenshots/dashboard.webp)
 
@@ -12,6 +12,7 @@
 - 自動復旧機能
 - プロジェクトファイルのダウンロード
 - タスクの進捗管理
+- **モノレポ構成**: TypeScript 共有、パッケージ管理の最適化
 
 ## 始め方
 
@@ -28,14 +29,16 @@
 git clone https://github.com/yuru-sha/Claude-Code-Communication.git
 cd Claude-Code-Communication
 
-# 依存関係をインストール
+# 依存関係をインストール（モノレポ対応）
 npm install
 
 # データベースセットアップ
+cd apps/server
 npx prisma generate
 npx prisma migrate dev
+cd ../..
 
-# システム起動
+# システム起動（フロント・バックエンド同時）
 npm run dev
 ```
 
@@ -77,18 +80,28 @@ WebUI: http://localhost:3000
 
 ## 技術スタック
 
-### フロントエンド
+### アーキテクチャ
+- **モノレポ構成**: npm workspaces による統合管理
+- **共有パッケージ**: types, utils, ui コンポーネント
+- **TypeScript プロジェクト参照**: 型安全な開発環境
+
+### フロントエンド（`apps/client`）
 - React 19 + TypeScript
 - Vite + TailwindCSS 4.1.11
 - Lucide React（アイコン）
 - Socket.IO Client
 
-### バックエンド
+### バックエンド（`apps/server`）
 - Node.js + Express 5
 - Prisma ORM + SQLite
 - Socket.IO Server
 - tmux（プロセス管理）
 - archiver（ZIP 圧縮）
+
+### 共有パッケージ（`packages/`）
+- `@claude-communication/types`: 型定義
+- `@claude-communication/utils`: ユーティリティ関数
+- `@claude-communication/ui`: 共通 UI コンポーネント
 
 ## システム監視
 
@@ -140,8 +153,15 @@ tmux attach-session -t president    # President
 
 #### システム関連
 - **ポート競合**: `PORT=3002 npm run dev` でポート変更
-- **データベースエラー**: `rm -f data/database.db && npx prisma migrate dev`
+- **データベースエラー**: 
+  ```bash
+  cd apps/server
+  rm -f prisma/dev.db
+  npx prisma migrate dev
+  cd ../..
+  ```
 - **tmux セッション異常**: `tmux kill-server && npm run dev`
+- **モノレポビルドエラー**: `npm run build` で全体ビルド確認
 
 #### WebUI 関連
 - **接続エラー**: ブラウザのリロード、開発者ツールで Socket.IO 接続確認
@@ -170,6 +190,8 @@ tmux attach-session -t president    # President
 このプロジェクトは [README.original.md](README.original.md) をベースに拡張したものです。
 
 ### 主な改良点
+- **モノレポ構成**: npm workspaces による統合開発環境
+- **TypeScript 統合**: 型共有とプロジェクト参照による開発効率向上
 - **WebUI ダッシュボード**: tmux 手動操作から直感的な Web 操作へ
 - **自動復旧システム**: 手動復旧から自動障害検知・復旧へ
 - **Prisma + SQLite**: ファイルベースからデータベース永続化へ

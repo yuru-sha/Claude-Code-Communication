@@ -27,16 +27,18 @@ Claude Code Communication の Web UI は、複数の Claude Code エージェン
 
 ## セットアップ
 
-### 1. 依存関係のインストール
+### 1. 依存関係のインストール（モノレポ対応）
 ```bash
 npm install
 ```
 
 ### 2. データベースのセットアップ
 ```bash
-# Prisma の初期化とマイグレーション実行
+# Prisma の初期化とマイグレーション実行（モノレポ対応）
+cd apps/server
 npx prisma generate
 npx prisma migrate dev
+cd ../..
 ```
 
 ### 3. tmux セッションの準備（初回のみ）

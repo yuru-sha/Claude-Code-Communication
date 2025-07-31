@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@claude-communication/types": ["../../packages/types/src"],
+      "@claude-communication/ui": ["../../packages/ui/src"],
+      "@claude-communication/utils": ["../../packages/utils/src"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "*.config.ts",
+    "*.config.js"
+  ],
+  "references": [
+    { "path": "../../packages/types" },
+    { "path": "../../packages/ui" },
+    { "path": "../../packages/utils" }
+  ]
+}

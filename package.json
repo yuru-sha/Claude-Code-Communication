@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "複数の AI が協力して働く、まるで会社のような開発システムです",
   "main": "index.js",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "directories": {
     "doc": "docs"
   },
@@ -36,19 +41,20 @@
     "vitest": "^3.2.4"
   },
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:frontend\"",
-    "dev:frontend": "vite",
-    "dev:server": "ts-node-dev --respawn --transpile-only --project tsconfig.server.json src/backend/server.ts",
-    "build": "vite build",
-    "build:server": "tsc src/backend/server.ts --outDir dist/backend --target es2020 --module commonjs --esModuleInterop",
-    "start": "NODE_ENV=production node dist/backend/server.js",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "optimize:images": "node scripts/optimize-images.js",
-    "bundle-analyzer": "ANALYZE=true npm run build",
-    "perf:analyze": "npm run bundle-analyzer",
-    "perf:lighthouse": "lighthouse http://localhost:3000 --output=json --output-path=./lighthouse-report.json",
-    "perf:test": "npm run test:run"
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:client": "npm run dev --workspace=@claude-communication/client",
+    "dev:server": "npm run dev --workspace=@claude-communication/server",
+    "build": "npm run build:packages && npm run build:apps",
+    "build:packages": "npm run build --workspace=@claude-communication/types && npm run build --workspace=@claude-communication/utils && npm run build --workspace=@claude-communication/ui",
+    "build:apps": "npm run build --workspace=@claude-communication/client",
+    "build:apps:full": "npm run build --workspace=@claude-communication/client && npm run build --workspace=@claude-communication/server",
+    "build:client": "npm run build --workspace=@claude-communication/client",
+    "build:server": "npm run build --workspace=@claude-communication/server",
+    "start": "npm run start --workspace=@claude-communication/server",
+    "test": "npm run test --workspaces",
+    "test:run": "npm run test --workspaces",
+    "clean": "rm -rf apps/*/dist packages/*/dist",
+    "optimize:images": "node scripts/optimize-images.js"
   },
   "repository": {
     "type": "git",
